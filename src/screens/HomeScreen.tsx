@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Repeat, AlertTriangle, Wallet } from 'lucide-react';
+import { Repeat, AlertTriangle, Wallet, Percent } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import ErrorState from '../components/ui/ErrorState';
@@ -157,6 +157,20 @@ export default function HomeScreen() {
             <span className="text-sm font-semibold text-ink-900">{formatCurrency(data.kpis.retiradasSocio)}</span>
           </div>
           <p className="mt-1 text-xs text-ink-400">Informativo — não entra no resultado operacional da loja.</p>
+        </div>
+      )}
+
+      {/* Deduções de Receita (antecipação de recebíveis) — já refletidas em Receita/Resultado, exibidas à parte para transparência */}
+      {data.kpis.deducoesReceita > 0 && (
+        <div className="card p-4 border border-ink-200 bg-ink-50/50">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Percent className="h-4 w-4 text-ink-500" />
+              <span className="text-sm font-medium text-ink-700">Deduções de Receita no Mês (Antecipação)</span>
+            </div>
+            <span className="text-sm font-semibold text-ink-900">{formatCurrency(data.kpis.deducoesReceita)}</span>
+          </div>
+          <p className="mt-1 text-xs text-ink-400">Taxa de antecipação de recebíveis (ex.: Localiza) — já descontada da Receita e do Resultado do Mês acima.</p>
         </div>
       )}
 

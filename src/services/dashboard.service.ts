@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { normalizeCostCenterName } from '../utils/costCenter';
+import { netAmount } from '../utils/deduction';
 import type { DashboardKPIs } from '../types';
 
 // Retiradas de sócio não são despesa operacional da loja — ficam fora de
@@ -24,7 +25,7 @@ async function fetchMonthData(month: number, year: number) {
   const [revenuesResult, expensesResult] = await Promise.all([
     supabase
       .from('revenues')
-      .select('amount, quantity, revenue_date')
+      .select('amount, quantity, revenue_date, main_category:revenue_main_categories(deduction_rate)')
       .gte('revenue_date', startDate)
       .lte('revenue_date', endDate),
     supabase
@@ -40,7 +41,18 @@ async function fetchMonthData(month: number, year: number) {
   const revenues = revenuesResult.data ?? [];
   const expenses = expensesResult.data ?? [];
 
-  const receita = revenues.reduce((sum, r) => sum + Number(r.amount), 0);
+  // Receita líquida da dedução automática da categoria (ex.: taxa de
+  // antecipação de recebíveis da Localiza) — nunca uma segunda fonte de
+  // verdade armazenada, sempre recalculada aqui a partir do amount bruto.
+  let receita = 0;
+  let deducoesReceita = 0;
+  for (const r of revenues) {
+    const gross = Number(r.amount);
+    const rate = (r.main_category as unknown as { deduction_rate: number } | null)?.deduction_rate;
+    const net = netAmount(gross, rate);
+    receita += net;
+    deducoesReceita += gross - net;
+  }
   // Each `revenues` row is one sale (venda), regardless of how many items
   // (subcategorias) it contains — "quantidade de vendas" counts sales, not items.
   const quantidadeVendas = revenues.length;
@@ -64,7 +76,7 @@ async function fetchMonthData(month: number, year: number) {
     }
   }
 
-  return { receita, despesa, retiradas, quantidadeVendas, categoryTotals, revenues };
+  return { receita, despesa, retiradas, quantidadeVendas, categoryTotals, revenues, deducoesReceita };
 }
 
 export async function fetchDashboardKPIs(
@@ -144,6 +156,7 @@ export async function fetchDashboardKPIs(
     variacaoDespesa,
     totalBudget,
     retiradasSocio: current.retiradas,
+    deducoesReceita: current.deducoesReceita,
   };
 }
 
@@ -154,15 +167,16 @@ export async function fetchRevenueByCategory(
   const { startDate, endDate } = getDateRange(competenceMonth, competenceYear);
   const { data, error } = await supabase
     .from('revenues')
-    .select('amount, main_category:revenue_main_categories(name)')
+    .select('amount, main_category:revenue_main_categories(name, deduction_rate)')
     .gte('revenue_date', startDate)
     .lte('revenue_date', endDate);
   if (error) throw error;
 
   const grouped: Record<string, number> = {};
   for (const r of data ?? []) {
-    const catName = (r.main_category as unknown as { name: string })?.name ?? 'Sem categoria';
-    grouped[catName] = (grouped[catName] || 0) + Number(r.amount);
+    const mainCategory = r.main_category as unknown as { name: string; deduction_rate: number } | null;
+    const catName = mainCategory?.name ?? 'Sem categoria';
+    grouped[catName] = (grouped[catName] || 0) + netAmount(Number(r.amount), mainCategory?.deduction_rate);
   }
   return Object.entries(grouped).map(([name, value]) => ({ name, value }));
 }
@@ -173,16 +187,17 @@ export async function fetchRevenueBySubcategory(
   const { startDate, endDate } = getDateRange(competenceMonth, competenceYear);
   const { data, error } = await supabase
     .from('revenues')
-    .select('items:revenue_items(amount, subcategory:revenue_subcategories(name))')
+    .select('main_category:revenue_main_categories(deduction_rate), items:revenue_items(amount, subcategory:revenue_subcategories(name))')
     .gte('revenue_date', startDate)
     .lte('revenue_date', endDate);
   if (error) throw error;
 
   const grouped: Record<string, number> = {};
   for (const r of data ?? []) {
+    const rate = (r.main_category as unknown as { deduction_rate: number } | null)?.deduction_rate;
     for (const item of (r.items as unknown as { amount: number; subcategory: { name: string } | null }[]) ?? []) {
       const subName = item.subcategory?.name ?? 'Sem subcategoria';
-      grouped[subName] = (grouped[subName] || 0) + Number(item.amount);
+      grouped[subName] = (grouped[subName] || 0) + netAmount(Number(item.amount), rate);
     }
   }
   return Object.entries(grouped).map(([name, value]) => ({ name, value }));

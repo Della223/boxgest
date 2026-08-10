@@ -4,6 +4,7 @@ import { fetchExpenses } from './expense.service';
 import { fetchMarketingPosts } from './marketing.service';
 import { fetchBudgets, applyAutomaticBudgets } from './budget.service';
 import { normalizeCostCenterName } from '../utils/costCenter';
+import { netAmount } from '../utils/deduction';
 import type { CalendarDayInfo, HomeInsight, DashboardKPIs, Expense, Revenue, Budget, MarketingPost } from '../types';
 
 export interface HomeData {
@@ -55,7 +56,7 @@ function computeEquivalentPeriodBaseline(
 
   const receitaMesAnterior = revenues
     .filter((r) => r.revenue_date >= prevStartDate && r.revenue_date <= prevEndDate)
-    .reduce((s, r) => s + Number(r.amount), 0);
+    .reduce((s, r) => s + netAmount(Number(r.amount), r.main_category?.deduction_rate), 0);
 
   let despesaMesAnterior = 0;
   for (const e of expenses) {

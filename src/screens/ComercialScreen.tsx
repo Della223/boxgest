@@ -18,6 +18,7 @@ import {
 import { createAuditLog } from '../services/audit.service';
 import { logChanges, fetchChangeHistory } from '../services/change-history.service';
 import { formatCurrency, formatDate, formatNumber, downloadCSV, getCurrentCompetence } from '../utils/format';
+import { netAmount } from '../utils/deduction';
 import type { Revenue, RevenueMainCategory, RevenueSubcategory, ChangeHistory } from '../types';
 
 const MONTH_NAMES = [
@@ -405,7 +406,7 @@ export default function ComercialScreen() {
   };
 
   const handleExport = () => {
-    const headers = ['Competência', 'Data', 'Categoria Principal', 'Subcategoria', 'Quantidade', 'Valor', 'Observações', 'Usuário'];
+    const headers = ['Competência', 'Data', 'Categoria Principal', 'Subcategoria', 'Quantidade', 'Valor Bruto', 'Valor Líquido', 'Observações', 'Usuário'];
     const rows = filteredRevenues.flatMap((r) =>
       (r.items ?? []).map((item) => [
         r.competence_month && r.competence_year ? `${String(r.competence_month).padStart(2, '0')}/${r.competence_year}` : '-',
@@ -414,6 +415,7 @@ export default function ComercialScreen() {
         item.subcategory?.name ?? '-',
         item.quantity,
         formatCurrency(Number(item.amount)),
+        formatCurrency(netAmount(Number(item.amount), r.main_category?.deduction_rate)),
         r.notes ?? '',
         r.user?.name ?? '-',
       ])
@@ -548,7 +550,8 @@ export default function ComercialScreen() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-ink-500 uppercase tracking-wider">Data</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-ink-500 uppercase tracking-wider">Categoria Principal</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-ink-500 uppercase tracking-wider">Itens</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-ink-500 uppercase tracking-wider">Valor</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-ink-500 uppercase tracking-wider">Valor Bruto</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-ink-500 uppercase tracking-wider">Valor Líquido</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-ink-500 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
@@ -575,6 +578,7 @@ export default function ComercialScreen() {
                           </button>
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-ink-900 text-right whitespace-nowrap">{formatCurrency(Number(r.amount))}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-ink-700 text-right whitespace-nowrap">{formatCurrency(netAmount(Number(r.amount), r.main_category?.deduction_rate))}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
                             <button onClick={() => setViewTarget(r)} className="p-1.5 text-ink-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors" title="Visualizar">
@@ -597,13 +601,14 @@ export default function ComercialScreen() {
                       </tr>
                       {isExpanded && (
                         <tr className="bg-ink-50/60">
-                          <td colSpan={6} className="px-4 py-3">
+                          <td colSpan={7} className="px-4 py-3">
                             <table className="min-w-full">
                               <thead>
                                 <tr>
                                   <th className="pb-1.5 pl-6 text-left text-xs font-semibold text-ink-500">Subcategoria</th>
                                   <th className="pb-1.5 text-right text-xs font-semibold text-ink-500">Qtd.</th>
-                                  <th className="pb-1.5 pr-4 text-right text-xs font-semibold text-ink-500">Valor</th>
+                                  <th className="pb-1.5 text-right text-xs font-semibold text-ink-500">Valor Bruto</th>
+                                  <th className="pb-1.5 pr-4 text-right text-xs font-semibold text-ink-500">Valor Líquido</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -611,7 +616,8 @@ export default function ComercialScreen() {
                                   <tr key={item.id}>
                                     <td className="py-1 pl-6 text-sm text-ink-700">{item.subcategory?.name ?? '-'}</td>
                                     <td className="py-1 text-sm text-ink-600 text-right">{item.quantity}</td>
-                                    <td className="py-1 pr-4 text-sm font-medium text-ink-900 text-right">{formatCurrency(Number(item.amount))}</td>
+                                    <td className="py-1 text-sm font-medium text-ink-900 text-right">{formatCurrency(Number(item.amount))}</td>
+                                    <td className="py-1 pr-4 text-sm font-medium text-ink-700 text-right">{formatCurrency(netAmount(Number(item.amount), r.main_category?.deduction_rate))}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -905,7 +911,8 @@ export default function ComercialScreen() {
               <div className="flex justify-between"><span className="text-sm text-ink-500">Competência:</span><span className="text-sm font-medium text-ink-900">{viewTarget.competence_month && viewTarget.competence_year ? `${String(viewTarget.competence_month).padStart(2, '0')}/${viewTarget.competence_year}` : '-'}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Data:</span><span className="text-sm font-medium text-ink-900">{formatDate(viewTarget.revenue_date)}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Categoria Principal:</span><span className="text-sm font-medium text-ink-900">{viewTarget.main_category?.name ?? '-'}</span></div>
-              <div className="flex justify-between"><span className="text-sm text-ink-500">Valor Total:</span><span className="text-sm font-bold text-ink-900">{formatCurrency(Number(viewTarget.amount))}</span></div>
+              <div className="flex justify-between"><span className="text-sm text-ink-500">Valor Bruto:</span><span className="text-sm font-bold text-ink-900">{formatCurrency(Number(viewTarget.amount))}</span></div>
+              <div className="flex justify-between"><span className="text-sm text-ink-500">Valor Líquido:</span><span className="text-sm font-bold text-ink-700">{formatCurrency(netAmount(Number(viewTarget.amount), viewTarget.main_category?.deduction_rate))}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Usuário:</span><span className="text-sm font-medium text-ink-900">{viewTarget.user?.name ?? '-'}</span></div>
               {viewTarget.notes && <div><span className="text-sm text-ink-500">Observações:</span><p className="mt-1 text-sm text-ink-900">{viewTarget.notes}</p></div>}
             </div>
@@ -917,7 +924,8 @@ export default function ComercialScreen() {
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-ink-500">Subcategoria</th>
                       <th className="px-3 py-2 text-right text-xs font-semibold text-ink-500">Qtd.</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-ink-500">Valor</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-ink-500">Valor Bruto</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-ink-500">Valor Líquido</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-ink-100">
@@ -926,6 +934,7 @@ export default function ComercialScreen() {
                         <td className="px-3 py-2 text-sm text-ink-700">{item.subcategory?.name ?? '-'}</td>
                         <td className="px-3 py-2 text-sm text-right">{item.quantity}</td>
                         <td className="px-3 py-2 text-sm text-right font-medium">{formatCurrency(Number(item.amount))}</td>
+                        <td className="px-3 py-2 text-sm text-right font-medium text-ink-700">{formatCurrency(netAmount(Number(item.amount), viewTarget.main_category?.deduction_rate))}</td>
                       </tr>
                     ))}
                   </tbody>

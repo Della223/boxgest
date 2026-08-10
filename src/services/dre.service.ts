@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { normalizeCostCenterName } from '../utils/costCenter';
+import { netAmount } from '../utils/deduction';
 import type { DREData, DREExpenseCostCenterGroup } from '../types';
 
 // CPV e CSP são custo direto (deduzido antes do Lucro Bruto, junto com a
@@ -65,7 +66,7 @@ export async function fetchDRE(
   const [revenuesResult, expensesResult] = await Promise.all([
     supabase
       .from('revenues')
-      .select('main_category:revenue_main_categories(name), items:revenue_items(amount, subcategory:revenue_subcategories(name))')
+      .select('main_category:revenue_main_categories(name, deduction_rate), items:revenue_items(amount, subcategory:revenue_subcategories(name))')
       .gte('revenue_date', startDate)
       .lte('revenue_date', endDate),
     supabase
@@ -84,10 +85,13 @@ export async function fetchDRE(
 
   // ---- Receitas: Categoria Principal -> Subcategoria ----
   const receitaMap: Record<string, { amount: number; subcategories: Record<string, number> }> = {};
+  const deducoesMap: Record<string, number> = {};
   let receitaBruta = 0;
+  let deducoes = 0;
 
   for (const r of revenues) {
-    const catName = (r.main_category as unknown as { name: string })?.name ?? 'Sem categoria';
+    const mainCategory = r.main_category as unknown as { name: string; deduction_rate: number } | null;
+    const catName = mainCategory?.name ?? 'Sem categoria';
     if (!receitaMap[catName]) receitaMap[catName] = { amount: 0, subcategories: {} };
 
     for (const item of (r.items as unknown as { amount: number; subcategory: { name: string } | null }[]) ?? []) {
@@ -96,6 +100,12 @@ export async function fetchDRE(
       receitaMap[catName].amount += amount;
       receitaMap[catName].subcategories[subName] = (receitaMap[catName].subcategories[subName] || 0) + amount;
       receitaBruta += amount;
+
+      const deducao = amount - netAmount(amount, mainCategory?.deduction_rate);
+      if (deducao > 0) {
+        deducoesMap[catName] = (deducoesMap[catName] || 0) + deducao;
+        deducoes += deducao;
+      }
     }
   }
 
@@ -105,7 +115,8 @@ export async function fetchDRE(
     subcategories: Object.entries(data.subcategories).map(([name, amount]) => ({ name, amount })),
   }));
 
-  const deducoes = 0;
+  const deducoesPorCategoria = Object.entries(deducoesMap).map(([name, amount]) => ({ name, amount }));
+
   const receitaLiquida = receitaBruta - deducoes;
 
   // ---- Despesas: Centro de Custo -> Categoria -> Subcategoria, separadas por bucket ----
@@ -162,6 +173,7 @@ export async function fetchDRE(
     receitaBruta,
     receitaPorCategoria,
     deducoes,
+    deducoesPorCategoria,
     receitaLiquida,
     custosDiretos,
     custosDiretosPorCategoria,

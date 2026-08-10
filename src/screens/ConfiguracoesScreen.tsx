@@ -51,6 +51,7 @@ interface TableItem {
   parentName?: string;
   costCenterId?: string;
   costCenterName?: string;
+  deductionRate?: number;
 }
 
 export default function ConfiguracoesScreen() {
@@ -75,6 +76,7 @@ export default function ConfiguracoesScreen() {
   const [formName, setFormName] = useState('');
   const [formParentCategory, setFormParentCategory] = useState('');
   const [formCostCenter, setFormCostCenter] = useState('');
+  const [formDeductionRate, setFormDeductionRate] = useState('0');
   const [saving, setSaving] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: string } | null>(null);
@@ -134,14 +136,16 @@ export default function ConfiguracoesScreen() {
     setFormName('');
     setFormParentCategory('');
     setFormCostCenter('');
+    setFormDeductionRate('0');
     setModalOpen(true);
   };
 
-  const handleOpenEdit = (item: { id: string; name: string }, parentCategoryId?: string, costCenterId?: string) => {
+  const handleOpenEdit = (item: { id: string; name: string }, parentCategoryId?: string, costCenterId?: string, deductionRate?: number) => {
     setEditingItem(item);
     setFormName(item.name);
     setFormParentCategory(parentCategoryId ?? '');
     setFormCostCenter(costCenterId ?? '');
+    setFormDeductionRate(String((deductionRate ?? 0) * 100));
     setModalOpen(true);
   };
 
@@ -150,17 +154,26 @@ export default function ConfiguracoesScreen() {
       toast.error('O nome é obrigatório.');
       return;
     }
+    if (activeTab === 'receita-categorias') {
+      const rate = Number(formDeductionRate);
+      if (Number.isNaN(rate) || rate < 0 || rate >= 100) {
+        toast.error('A taxa de dedução deve ser um número entre 0 e 100.');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const auditUser = user?.id ?? null;
       if (activeTab === 'receita-categorias') {
+        const deductionRate = Number(formDeductionRate) / 100;
         if (editingItem) {
-          await updateRevenueMainCategory(editingItem.id, { name: formName.trim() });
-          await createAuditLog(auditUser, 'configuracoes', 'update', editingItem.id, null, { name: formName.trim() });
+          await updateRevenueMainCategory(editingItem.id, { name: formName.trim(), deduction_rate: deductionRate });
+          await createAuditLog(auditUser, 'configuracoes', 'update', editingItem.id, null, { name: formName.trim(), deduction_rate: deductionRate });
           toast.success('Categoria atualizada com sucesso.');
         } else {
-          await createRevenueMainCategory(formName.trim());
-          await createAuditLog(auditUser, 'configuracoes', 'create', undefined, null, { name: formName.trim() });
+          const created = await createRevenueMainCategory(formName.trim());
+          if (deductionRate > 0) await updateRevenueMainCategory(created.id, { deduction_rate: deductionRate });
+          await createAuditLog(auditUser, 'configuracoes', 'create', created.id, null, { name: formName.trim(), deduction_rate: deductionRate });
           toast.success('Categoria criada com sucesso.');
         }
       } else if (activeTab === 'receita-subcategorias') {
@@ -307,7 +320,7 @@ export default function ConfiguracoesScreen() {
     let items: TableItem[] = [];
 
     if (activeTab === 'receita-categorias') {
-      items = revenueMainCategories.map(c => ({ id: c.id, name: c.name, active: c.active, type: 'receita-principal' }));
+      items = revenueMainCategories.map(c => ({ id: c.id, name: c.name, active: c.active, type: 'receita-principal', deductionRate: c.deduction_rate }));
     } else if (activeTab === 'receita-subcategorias') {
       items = revenueSubcategories.map(s => ({
         id: s.id, name: s.name, active: s.active, type: 'receita-subcategoria',
@@ -350,6 +363,7 @@ export default function ConfiguracoesScreen() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-ink-500 uppercase tracking-wider">Nome</th>
                 {(activeTab === 'subcategorias' || activeTab === 'receita-subcategorias') && <th className="px-4 py-3 text-left text-xs font-semibold text-ink-500 uppercase tracking-wider">Categoria Pai</th>}
                 {activeTab === 'despesa-categorias' && <th className="px-4 py-3 text-left text-xs font-semibold text-ink-500 uppercase tracking-wider">Centro de Custo</th>}
+                {activeTab === 'receita-categorias' && <th className="px-4 py-3 text-right text-xs font-semibold text-ink-500 uppercase tracking-wider">Taxa de Dedução</th>}
                 <th className="px-4 py-3 text-left text-xs font-semibold text-ink-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-ink-500 uppercase tracking-wider">Ações</th>
               </tr>
@@ -360,12 +374,13 @@ export default function ConfiguracoesScreen() {
                   <td className="px-4 py-3 text-sm font-medium text-ink-900">{item.name}</td>
                   {(activeTab === 'subcategorias' || activeTab === 'receita-subcategorias') && <td className="px-4 py-3 text-sm text-ink-600">{item.parentName}</td>}
                   {activeTab === 'despesa-categorias' && <td className="px-4 py-3 text-sm text-ink-600">{item.costCenterName}</td>}
+                  {activeTab === 'receita-categorias' && <td className="px-4 py-3 text-sm text-ink-600 text-right">{((item.deductionRate ?? 0) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td>}
                   <td className="px-4 py-3">
                     <Badge variant={item.active ? 'success' : 'neutral'}>{item.active ? 'Ativa' : 'Inativa'}</Badge>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => handleOpenEdit({ id: item.id, name: item.name }, item.parentCategoryId, item.costCenterId)} className="p-1.5 text-ink-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors" title="Editar">
+                      <button onClick={() => handleOpenEdit({ id: item.id, name: item.name }, item.parentCategoryId, item.costCenterId, item.deductionRate)} className="p-1.5 text-ink-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors" title="Editar">
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button onClick={() => handleToggleActive(item.id, item.active, item.type)} className="p-1.5 text-ink-500 hover:text-warning-600 hover:bg-warning-50 rounded-md transition-colors" title={item.active ? 'Inativar' : 'Ativar'}>
@@ -767,6 +782,24 @@ export default function ConfiguracoesScreen() {
               maxLength={150}
             />
           </div>
+          {activeTab === 'receita-categorias' && (
+            <div>
+              <label className="block text-sm font-medium text-ink-700 mb-1.5">Taxa de Dedução (%)</label>
+              <input
+                type="number"
+                min={0}
+                max={99.99}
+                step="0.01"
+                value={formDeductionRate}
+                onChange={(e) => setFormDeductionRate(e.target.value)}
+                className="input-field"
+                placeholder="0"
+              />
+              <p className="mt-1 text-xs text-ink-400">
+                Deduzida automaticamente da receita bruta de toda venda desta categoria (ex.: taxa de antecipação de recebíveis). Nunca lançar como despesa.
+              </p>
+            </div>
+          )}
         </div>
       </Modal>
 

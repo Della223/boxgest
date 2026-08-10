@@ -8,7 +8,7 @@ import type { RevenueMainCategory, RevenueSubcategory, ExpenseCategory, ExpenseS
 // split already used for expense categories/subcategories below)
 // ============================================================
 
-export async function updateRevenueMainCategory(id: string, updates: { name?: string; active?: boolean }): Promise<RevenueMainCategory> {
+export async function updateRevenueMainCategory(id: string, updates: { name?: string; active?: boolean; deduction_rate?: number }): Promise<RevenueMainCategory> {
   const { data, error } = await supabase
     .from('revenue_main_categories')
     .update(updates)

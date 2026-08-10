@@ -15,6 +15,7 @@ import { fetchDRE } from '../services/dre.service';
 import { fetchMarketingPosts } from '../services/marketing.service';
 import { fetchAuditLogs } from '../services/audit.service';
 import { formatCurrency, formatDate, formatDateTime, getCurrentCompetence, getCompetenceString, downloadCSV, printContent } from '../utils/format';
+import { netAmount } from '../utils/deduction';
 import type { Revenue, Expense, Budget, MarketingPost, AuditLog } from '../types';
 
 interface ReportDef {
@@ -71,12 +72,13 @@ export default function RelatoriosScreen() {
      if (reportId === 'receitas') {
         const data = await fetchRevenues({});
         title = `Relatório de Receitas — ${getCompetenceString(filterMonth, filterYear)}`;
-        headers = ['Data', 'Categoria Principal', 'Subcategoria', 'Quantidade', 'Valor', 'Ticket Médio', 'Observações', 'Usuário'];
+        headers = ['Data', 'Categoria Principal', 'Subcategoria', 'Quantidade', 'Valor Bruto', 'Valor Líquido', 'Ticket Médio', 'Observações', 'Usuário'];
         // Uma venda pode ter vários itens (subcategorias) — o relatório detalha por item.
         rows = data.flatMap((r: Revenue) =>
           (r.items ?? []).map((item) => [
             formatDate(r.revenue_date), r.main_category?.name ?? '-', item.subcategory?.name ?? '-', item.quantity,
             formatCurrency(Number(item.amount)),
+            formatCurrency(netAmount(Number(item.amount), r.main_category?.deduction_rate)),
             item.quantity > 0 ? formatCurrency(Number(item.amount) / item.quantity) : '-',
             r.notes ?? '-', r.user?.name ?? '-',
           ])
@@ -102,6 +104,7 @@ export default function RelatoriosScreen() {
           ['Receita Bruta', formatCurrency(data.receitaBruta)],
           ...data.receitaPorCategoria.map((c) => [`  ${c.category}`, formatCurrency(c.amount)]),
           ['(-) Deduções', formatCurrency(data.deducoes)],
+          ...data.deducoesPorCategoria.map((d) => [`  ${d.name}`, formatCurrency(d.amount)]),
           ['(=) Receita Líquida', formatCurrency(data.receitaLiquida)],
           ['(-) Custos Diretos (CPV + CSP)', formatCurrency(data.custosDiretos)],
           ...data.custosDiretosPorCategoria.map((c) => [`  ${c.category}`, formatCurrency(c.amount)]),
@@ -162,15 +165,16 @@ export default function RelatoriosScreen() {
       } else if (reportId === 'receitas-categoria') {
         const revs = await fetchRevenues({});
         title = `Receitas por Categoria — ${getCompetenceString(filterMonth, filterYear)}`;
-        headers = ['Categoria', 'Total', 'Quantidade'];
-        const grouped: Record<string, { total: number; qty: number }> = {};
+        headers = ['Categoria', 'Total Bruto', 'Total Líquido', 'Quantidade'];
+        const grouped: Record<string, { total: number; totalLiquido: number; qty: number }> = {};
         for (const r of revs) {
           const cat = r.main_category?.name ?? '-';
-          if (!grouped[cat]) grouped[cat] = { total: 0, qty: 0 };
+          if (!grouped[cat]) grouped[cat] = { total: 0, totalLiquido: 0, qty: 0 };
           grouped[cat].total += Number(r.amount);
+          grouped[cat].totalLiquido += netAmount(Number(r.amount), r.main_category?.deduction_rate);
           grouped[cat].qty += r.quantity;
         }
-        rows = Object.entries(grouped).map(([cat, data]) => [cat, formatCurrency(data.total), data.qty]);
+        rows = Object.entries(grouped).map(([cat, data]) => [cat, formatCurrency(data.total), formatCurrency(data.totalLiquido), data.qty]);
       } else if (reportId === 'centros-custo') {
         const exps = await fetchExpenses({ competenceMonth: filterMonth, competenceYear: filterYear });
         title = `Centros de Custo — ${getCompetenceString(filterMonth, filterYear)}`;

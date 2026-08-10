@@ -13,6 +13,8 @@ export interface RevenueMainCategory {
   id: string;
   name: string;
   active: boolean;
+  /** Fração (0-1) deduzida da receita bruta desta categoria para chegar à Receita Líquida (ex.: taxa de antecipação de recebíveis). Nunca lançada como despesa. */
+  deduction_rate: number;
   created_at: string;
 }
 
@@ -300,6 +302,8 @@ export interface DashboardKPIs {
   resultadoComparavel?: boolean;
   /** Centro de Custo "Retiradas de Sócio" — já excluído de despesaAcumulada/resultado, exposto à parte para exibição informativa. */
   retiradasSocio: number;
+  /** Total deduzido da receita bruta no período (ex.: taxa de antecipação de recebíveis da Localiza) — já refletido em receitaAcumulada/resultado, exposto à parte para exibição informativa. */
+  deducoesReceita: number;
 }
 
 export interface DRESubItem {
@@ -329,6 +333,8 @@ export interface DREData {
   receitaBruta: number;
   receitaPorCategoria: DRERevenueCategoryGroup[];
   deducoes: number;
+  /** Deduções da receita bruta, agrupadas por categoria principal (ex.: taxa de antecipação de recebíveis da Localiza). */
+  deducoesPorCategoria: DRESubItem[];
   receitaLiquida: number;
   /** Centros de custo CPV e CSP — custo direto, deduzido antes do Lucro Bruto. */
   custosDiretos: number;

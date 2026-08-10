@@ -130,7 +130,16 @@ export default function DREScreen() {
       }
     }
 
-    rows.push({ key: 'deducoes', label: '(-) Deduções', value: -currentDRE.deducoes, type: 'subtotal', indent: 0 });
+    const hasDeducoes = currentDRE.deducoesPorCategoria.length > 0;
+    rows.push({
+      key: 'deducoes', label: '(-) Deduções', value: -currentDRE.deducoes, type: 'subtotal', indent: 0,
+      expandable: hasDeducoes, expanded: expandedKeys.has('deducoes'),
+    });
+    if (hasDeducoes && expandedKeys.has('deducoes')) {
+      for (const ded of currentDRE.deducoesPorCategoria) {
+        rows.push({ key: `deducoes|${ded.name}`, label: ded.name, value: -ded.amount, type: 'subcategory', indent: 1 });
+      }
+    }
     rows.push({ key: 'receita-liquida', label: '(=) Receita Líquida', value: currentDRE.receitaLiquida, type: 'total', indent: 0 });
 
     rows.push({ key: 'custos-diretos', label: '(-) Custos Diretos (CPV + CSP)', value: -currentDRE.custosDiretos, type: 'header', indent: 0 });
@@ -160,6 +169,10 @@ export default function DREScreen() {
     if (key === 'receita-bruta') return prev.receitaBruta;
     if (key === 'deducoes') return -prev.deducoes;
     if (key === 'receita-liquida') return prev.receitaLiquida;
+    if (key.startsWith('deducoes|')) {
+      const ded = prev.deducoesPorCategoria.find((d) => d.name === key.slice('deducoes|'.length));
+      return ded ? -ded.amount : 0;
+    }
     if (key === 'custos-diretos') return -prev.custosDiretos;
     if (key === 'lucro-bruto') return prev.lucroBruto;
     if (key === 'despesas-operacionais') return -prev.despesasOperacionais;
@@ -199,6 +212,9 @@ export default function DREScreen() {
       }
     }
     exportRows.push({ key: 'deducoes', label: '(-) Deduções', value: -currentDRE.deducoes });
+    for (const ded of currentDRE.deducoesPorCategoria) {
+      exportRows.push({ key: `deducoes|${ded.name}`, label: `  ${ded.name}`, value: -ded.amount });
+    }
     exportRows.push({ key: 'receita-liquida', label: '(=) Receita Líquida', value: currentDRE.receitaLiquida });
 
     const pushExpenseGroups = (groups: DREExpenseCostCenterGroup[], prefix: string) => {

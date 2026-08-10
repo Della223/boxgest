@@ -3,7 +3,7 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { DollarSign, TrendingUp, ShoppingCart, Download, Target } from 'lucide-react';
+import { DollarSign, TrendingUp, ShoppingCart, Download, Target, Percent } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
@@ -75,6 +75,7 @@ export default function DashboardScreen() {
       ['Projeção', formatCurrency(kpis.projecao)],
       ['Ticket Médio', formatCurrency(kpis.ticketMedio)],
       ['Quantidade de Vendas', kpis.quantidadeVendas],
+      ['Deduções de Receita (Antecipação)', formatCurrency(kpis.deducoesReceita)],
     ];
     downloadCSV('dashboard.csv', headers, rows);
     toast.success('Exportação concluída com sucesso.');
@@ -132,6 +133,14 @@ export default function DashboardScreen() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KPICard title="Ticket Médio" value={formatCurrency(kpis?.ticketMedio ?? 0)} icon={ShoppingCart} iconColor="text-accent-600" iconBg="bg-accent-50" />
         <KPICard title="Qtd. Vendas" value={String(kpis?.quantidadeVendas ?? 0)} icon={ShoppingCart} iconColor="text-secondary-600" iconBg="bg-secondary-50" />
+        <KPICard
+          title="Deduções de Receita (Antecipação)"
+          value={formatCurrency(kpis?.deducoesReceita ?? 0)}
+          icon={Percent}
+          iconColor="text-warning-600"
+          iconBg="bg-warning-50"
+          comparison="já refletido na Receita Acumulada"
+        />
       </div>
 
       {!hasData ? (
