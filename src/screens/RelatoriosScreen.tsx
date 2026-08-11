@@ -90,7 +90,7 @@ export default function RelatoriosScreen() {
         rows = data.map((e: Expense) => {
           return [
             getCompetenceString(e.competence_month, e.competence_year),
-            e.supplier ?? '-', e.cost_center?.name ?? '-', e.category?.name ?? '-',
+            e.supplier ?? '-', e.category?.cost_center?.name ?? '-', e.category?.name ?? '-',
             e.subcategory?.name ?? '-',
             formatCurrency(Number(e.total_amount)), `${e.installment_count}x`,
             e.payment_date ? formatDate(e.payment_date) : '-',
@@ -181,7 +181,7 @@ export default function RelatoriosScreen() {
         headers = ['Centro de Custo', 'Total'];
         const grouped: Record<string, number> = {};
         for (const e of exps) {
-          const cc = e.cost_center?.name ?? '-';
+          const cc = e.category?.cost_center?.name ?? '-';
           const instAmount = (e.installments ?? [])
             .filter(i => i.competence_month === filterMonth && i.competence_year === filterYear)
             .reduce((s, i) => s + Number(i.amount), 0);

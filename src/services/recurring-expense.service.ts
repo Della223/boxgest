@@ -7,7 +7,6 @@ export interface RecurringExpenseInput {
   description: string;
   category_id: string;
   subcategory_id?: string | null;
-  cost_center_id: string;
   supplier?: string | null;
   supplier_id?: string | null;
   due_day: number;
@@ -36,7 +35,7 @@ function competenceLTE(aMonth: number, aYear: number, bMonth: number, bYear: num
 }
 
 const EXPENSE_SELECT =
-  '*, category:expense_categories(*), subcategory:expense_subcategories(*), cost_center:cost_centers(*), supplier_ref:suppliers(*), user:users(*), installments:expense_installments(*)';
+  '*, category:expense_categories(*, cost_center:cost_centers(*)), subcategory:expense_subcategories(*), supplier_ref:suppliers(*), user:users(*), installments:expense_installments(*)';
 
 export async function createRecurringExpense(input: RecurringExpenseInput): Promise<{ recurring: RecurringExpense; expense: Expense }> {
   const { data: recurring, error: recError } = await supabase
@@ -45,7 +44,6 @@ export async function createRecurringExpense(input: RecurringExpenseInput): Prom
       description: input.description,
       category_id: input.category_id,
       subcategory_id: input.subcategory_id ?? null,
-      cost_center_id: input.cost_center_id,
       supplier_id: input.supplier_id ?? null,
       supplier: input.supplier ?? null,
       due_day: input.due_day,
@@ -71,7 +69,6 @@ export async function createRecurringExpense(input: RecurringExpenseInput): Prom
     supplier_id: input.supplier_id ?? null,
     category_id: input.category_id,
     subcategory_id: input.subcategory_id ?? null,
-    cost_center_id: input.cost_center_id,
     description: input.description,
     total_amount: input.initial_amount,
     installment_count: 1,
@@ -121,7 +118,6 @@ async function generatePendingOccurrences(): Promise<number> {
           supplier_id: rec.supplier_id,
           category_id: rec.category_id,
           subcategory_id: rec.subcategory_id,
-          cost_center_id: rec.cost_center_id,
           description: rec.description,
           total_amount: rec.last_confirmed_amount,
           installment_count: 1,

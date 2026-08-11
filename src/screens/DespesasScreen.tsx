@@ -69,7 +69,6 @@ function getCompetenceMatch(expense: Expense, month: number, year: number): { am
 interface ExpenseForm {
   competence_month: number;
   competence_year: number;
-  cost_center_id: string;
   category_id: string;
   subcategory_id: string;
   supplier_name: string;
@@ -115,7 +114,7 @@ export default function DespesasScreen() {
   const [form, setForm] = useState<ExpenseForm>({
     competence_month: getCurrentCompetence().month,
     competence_year: getCurrentCompetence().year,
-    cost_center_id: '', category_id: '', subcategory_id: '',
+    category_id: '', subcategory_id: '',
     supplier_name: '', supplier_id: null,
     payment_date: new Date().toISOString().split('T')[0],
     total_amount: '', installment_count: 1,
@@ -207,10 +206,20 @@ export default function DespesasScreen() {
     });
   }, [recalcForm.installment_mode, recalcForm.installment_count]);
 
-  const filteredCategories = useMemo(() => {
-    if (!form.cost_center_id) return [];
-    return allCategories.filter((c) => c.cost_center_id === form.cost_center_id);
-  }, [allCategories, form.cost_center_id]);
+  const categoriesByCostCenter = useMemo(() => {
+    const groups: Record<string, { costCenterName: string; categories: ExpenseCategory[] }> = {};
+    for (const c of allCategories) {
+      const ccName = c.cost_center?.name ?? 'Sem centro de custo';
+      if (!groups[ccName]) groups[ccName] = { costCenterName: ccName, categories: [] };
+      groups[ccName].categories.push(c);
+    }
+    return Object.values(groups).sort((a, b) => a.costCenterName.localeCompare(b.costCenterName));
+  }, [allCategories]);
+
+  const selectedCategoryCostCenterName = useMemo(() => {
+    if (!form.category_id) return null;
+    return allCategories.find((c) => c.id === form.category_id)?.cost_center?.name ?? 'Sem centro de custo';
+  }, [allCategories, form.category_id]);
 
   const filteredSubcategories = useMemo(() => {
     if (!form.category_id) return [];
@@ -271,7 +280,7 @@ export default function DespesasScreen() {
     const compYear = Number(filters.competenceYear);
     return expenses.filter((e) => {
       if (filters.categoryId && e.category_id !== filters.categoryId) return false;
-      if (filters.costCenterId && e.cost_center_id !== filters.costCenterId) return false;
+      if (filters.costCenterId && e.category?.cost_center_id !== filters.costCenterId) return false;
       if (dateStart && e.payment_date && e.payment_date < dateStart) return false;
       if (dateEnd && e.payment_date && e.payment_date > dateEnd) return false;
       if (!(e.installments ?? []).some((i) => i.competence_month === compMonth && i.competence_year === compYear)) return false;
@@ -309,7 +318,7 @@ export default function DespesasScreen() {
     const { month, year } = getCurrentCompetence();
     setEditingExpense(null);
     setForm({
-      competence_month: month, competence_year: year, cost_center_id: '', category_id: '',
+      competence_month: month, competence_year: year, category_id: '',
       subcategory_id: '', supplier_name: '', supplier_id: null,
       payment_date: new Date().toISOString().split('T')[0], total_amount: '',
       installment_count: 1,
@@ -328,7 +337,6 @@ export default function DespesasScreen() {
     setForm({
       competence_month: expense.competence_month,
       competence_year: expense.competence_year,
-      cost_center_id: expense.cost_center_id,
       category_id: expense.category_id,
       subcategory_id: expense.subcategory_id ?? '',
       supplier_name: expense.supplier ?? '',
@@ -354,7 +362,6 @@ export default function DespesasScreen() {
   const validateForm = () => {
     const errors: Record<string, string> = {};
     if (!form.competence_month || !form.competence_year) errors.competence = 'Competência é obrigatória.';
-    if (!form.cost_center_id) errors.cost_center_id = 'Centro de custo é obrigatório.';
     if (!form.category_id) errors.category_id = 'Categoria é obrigatória.';
     if (filteredSubcategories.length > 0 && !form.subcategory_id) errors.subcategory_id = 'Subcategoria é obrigatória.';
     if (!form.total_amount || Number(form.total_amount) <= 0) errors.total_amount = 'Valor deve ser maior que zero.';
@@ -400,7 +407,6 @@ export default function DespesasScreen() {
         supplier_id: supplierId,
         category_id: form.category_id,
         subcategory_id: form.subcategory_id || null,
-        cost_center_id: form.cost_center_id,
         description: null as string | null,
         total_amount: Number(form.total_amount),
         installment_count: Number(form.installment_count),
@@ -416,7 +422,6 @@ export default function DespesasScreen() {
         const oldValues: Record<string, unknown> = {
           competence_month: editingExpense.competence_month,
           competence_year: editingExpense.competence_year,
-          cost_center_id: editingExpense.cost_center_id,
           category_id: editingExpense.category_id,
           subcategory_id: editingExpense.subcategory_id,
           supplier: editingExpense.supplier,
@@ -426,7 +431,6 @@ export default function DespesasScreen() {
         const newValues: Record<string, unknown> = {
           competence_month: form.competence_month,
           competence_year: form.competence_year,
-          cost_center_id: form.cost_center_id,
           category_id: form.category_id,
           subcategory_id: form.subcategory_id || null,
           supplier: supplierName || null,
@@ -444,7 +448,6 @@ export default function DespesasScreen() {
           description: supplierName || (allCategories.find((c) => c.id === form.category_id)?.name ?? 'Despesa recorrente'),
           category_id: form.category_id,
           subcategory_id: form.subcategory_id || null,
-          cost_center_id: form.cost_center_id,
           supplier: supplierName || null,
           supplier_id: supplierId,
           due_day: Number(form.recurring_due_day),
@@ -623,7 +626,7 @@ export default function DespesasScreen() {
       return [
         getCompetenceString(compMonth, compYear),
         e.supplier ?? '-',
-        e.cost_center?.name ?? '-',
+        e.category?.cost_center?.name ?? '-',
         e.category?.name ?? '-',
         e.subcategory?.name ?? '-',
         formatCurrency(competenceAmount),
@@ -763,7 +766,7 @@ export default function DespesasScreen() {
                       {e.supplier ?? '-'}
                       {e.recurring_expense_id && <Repeat className="inline-block ml-1.5 h-3 w-3 text-primary-500 align-text-top" />}
                     </td>
-                    <td className="px-4 py-3 text-sm text-ink-600">{e.cost_center?.name ?? '-'}</td>
+                    <td className="px-4 py-3 text-sm text-ink-600">{e.category?.cost_center?.name ?? '-'}</td>
                     <td className="px-4 py-3 text-sm text-ink-600">
                       {e.category?.name ?? '-'}
                       {e.subcategory && <span className="text-ink-400 text-xs block">{e.subcategory.name}</span>}
@@ -858,42 +861,31 @@ export default function DespesasScreen() {
           {formErrors.competence && <p className="text-xs text-error-600">{formErrors.competence}</p>}
 
           <div className="flex items-center gap-2 text-sm font-semibold text-ink-700">
-            <Building2 className="h-4 w-4 text-primary-600" />
-            <span>Centro de Custo</span>
+            <Tag className="h-4 w-4 text-primary-600" />
+            <span>Categoria</span>
           </div>
           <div>
-            <label className="block text-sm font-medium text-ink-700 mb-1.5">Centro de Custo *</label>
+            <label className="block text-sm font-medium text-ink-700 mb-1.5">Categoria *</label>
             <select
-              value={form.cost_center_id}
-              onChange={(e) => setForm({ ...form, cost_center_id: e.target.value, category_id: '', subcategory_id: '' })}
+              value={form.category_id}
+              onChange={(e) => setForm({ ...form, category_id: e.target.value, subcategory_id: '' })}
               className="input-field"
             >
               <option value="">Selecione...</option>
-              {costCenters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {categoriesByCostCenter.map((g) => (
+                <optgroup key={g.costCenterName} label={g.costCenterName}>
+                  {g.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </optgroup>
+              ))}
             </select>
-            {formErrors.cost_center_id && <p className="mt-1 text-xs text-error-600">{formErrors.cost_center_id}</p>}
+            {formErrors.category_id && <p className="mt-1 text-xs text-error-600">{formErrors.category_id}</p>}
+            {selectedCategoryCostCenterName && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-500">
+                <Building2 className="h-3.5 w-3.5 text-ink-400" />
+                Centro de Custo: <span className="font-medium text-ink-700">{selectedCategoryCostCenterName}</span>
+              </p>
+            )}
           </div>
-
-          {form.cost_center_id && (
-            <>
-              <div className="flex items-center gap-2 text-sm font-semibold text-ink-700">
-                <Tag className="h-4 w-4 text-primary-600" />
-                <span>Categoria</span>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-700 mb-1.5">Categoria *</label>
-                <select
-                  value={form.category_id}
-                  onChange={(e) => setForm({ ...form, category_id: e.target.value, subcategory_id: '' })}
-                  className="input-field"
-                >
-                  <option value="">Selecione...</option>
-                  {filteredCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                {formErrors.category_id && <p className="mt-1 text-xs text-error-600">{formErrors.category_id}</p>}
-              </div>
-            </>
-          )}
 
           {form.category_id && filteredSubcategories.length > 0 && (
             <div>
@@ -1025,8 +1017,12 @@ export default function DespesasScreen() {
                 onChange={(e) => setForm({ ...form, total_amount: e.target.value })}
                 className="input-field"
                 placeholder="0,00"
+                disabled={!!editingExpense}
               />
               {formErrors.total_amount && <p className="mt-1 text-xs text-error-600">{formErrors.total_amount}</p>}
+              {editingExpense && (
+                <p className="mt-1 text-xs text-ink-400">Use o botão "Recalcular Parcelas" para alterar.</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-ink-700 mb-1.5">Número de Parcelas *</label>
@@ -1296,7 +1292,7 @@ export default function DespesasScreen() {
             <div className="grid grid-cols-2 gap-3">
               <div><span className="text-xs text-ink-500">Competência:</span><p className="text-sm font-medium">{getCompetenceString(viewTarget.competence_month, viewTarget.competence_year)}</p></div>
               <div><span className="text-xs text-ink-500">Fornecedor:</span><p className="text-sm font-medium">{viewTarget.supplier ?? '-'}</p></div>
-              <div><span className="text-xs text-ink-500">Centro de Custo:</span><p className="text-sm font-medium">{viewTarget.cost_center?.name ?? '-'}</p></div>
+              <div><span className="text-xs text-ink-500">Centro de Custo:</span><p className="text-sm font-medium">{viewTarget.category?.cost_center?.name ?? '-'}</p></div>
               <div><span className="text-xs text-ink-500">Categoria:</span><p className="text-sm font-medium">{viewTarget.category?.name ?? '-'}</p></div>
               <div><span className="text-xs text-ink-500">Subcategoria:</span><p className="text-sm font-medium">{viewTarget.subcategory?.name ?? '-'}</p></div>
               <div><span className="text-xs text-ink-500">Data Pagamento:</span><p className="text-sm font-medium">{viewTarget.payment_date ? formatDate(viewTarget.payment_date) : '-'}</p></div>

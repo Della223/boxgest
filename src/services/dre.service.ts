@@ -71,7 +71,7 @@ export async function fetchDRE(
       .lte('revenue_date', endDate),
     supabase
       .from('expenses')
-      .select('category:expense_categories(name), subcategory:expense_subcategories(name), cost_center:cost_centers(name), installments:expense_installments!inner(competence_month, competence_year, amount)')
+      .select('category:expense_categories(name, cost_center:cost_centers(name)), subcategory:expense_subcategories(name), installments:expense_installments!inner(competence_month, competence_year, amount)')
       .eq('installments.competence_month', competenceMonth)
       .eq('installments.competence_year', competenceYear)
       .neq('confirmation_status', 'pending_confirmation'),
@@ -130,8 +130,9 @@ export async function fetchDRE(
   let retiradas = 0;
 
   for (const e of expenses) {
-    const ccName = (e.cost_center as unknown as { name: string })?.name ?? 'Sem centro de custo';
-    const catName = (e.category as unknown as { name: string })?.name ?? 'Sem categoria';
+    const category = e.category as unknown as { name: string; cost_center: { name: string } | null } | null;
+    const ccName = category?.cost_center?.name ?? 'Sem centro de custo';
+    const catName = category?.name ?? 'Sem categoria';
     const subName = (e.subcategory as unknown as { name: string })?.name ?? 'Sem subcategoria';
     const bucket = classifyCostCenter(ccName);
 

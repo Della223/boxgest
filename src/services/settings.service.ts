@@ -146,9 +146,10 @@ export async function checkExpenseCategoryInUse(categoryId: string): Promise<boo
   return (count ?? 0) > 0;
 }
 
+/** "Em uso" agora significa: alguma categoria de despesa aponta para este centro de custo — a categoria é a única fonte de verdade do centro de custo de uma despesa (ver migration 020_derive_expense_cost_center). */
 export async function checkCostCenterInUse(costCenterId: string): Promise<boolean> {
   const { count, error } = await supabase
-    .from('expenses')
+    .from('expense_categories')
     .select('*', { count: 'exact', head: true })
     .eq('cost_center_id', costCenterId);
   if (error) throw error;

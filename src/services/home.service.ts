@@ -61,7 +61,7 @@ function computeEquivalentPeriodBaseline(
   let despesaMesAnterior = 0;
   for (const e of expenses) {
     if (e.confirmation_status === 'pending_confirmation') continue;
-    if (normalizeCostCenterName(e.cost_center?.name) === WITHDRAWAL_COST_CENTER) continue;
+    if (normalizeCostCenterName(e.category?.cost_center?.name) === WITHDRAWAL_COST_CENTER) continue;
     for (const inst of e.installments ?? []) {
       const instMonth = inst.competence_month ?? e.competence_month;
       const instYear = inst.competence_year ?? e.competence_year;

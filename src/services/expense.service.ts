@@ -7,7 +7,6 @@ export interface ExpenseFilters {
   supplier?: string;
   categoryId?: string;
   subcategoryId?: string;
-  costCenterId?: string;
   searchText?: string;
 }
 
@@ -18,7 +17,6 @@ export interface ExpenseInput {
   supplier_id?: string | null;
   category_id: string;
   subcategory_id?: string | null;
-  cost_center_id: string;
   description?: string | null;
   total_amount: number;
   installment_count: number;
@@ -146,7 +144,7 @@ export async function fetchExpenses(filters: ExpenseFilters = {}): Promise<Expen
 
   let query = supabase
     .from('expenses')
-    .select(`*, category:expense_categories(*), subcategory:expense_subcategories(*), cost_center:cost_centers(*), supplier_ref:suppliers(*), user:users(*), installments:${installmentsJoin}`)
+    .select(`*, category:expense_categories(*, cost_center:cost_centers(*)), subcategory:expense_subcategories(*), supplier_ref:suppliers(*), user:users(*), installments:${installmentsJoin}`)
     .order('created_at', { ascending: false });
 
   if (filters.competenceMonth) query = query.eq('installments.competence_month', filters.competenceMonth);
@@ -154,7 +152,6 @@ export async function fetchExpenses(filters: ExpenseFilters = {}): Promise<Expen
   if (filters.supplier) query = query.ilike('supplier', `%${filters.supplier}%`);
   if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
   if (filters.subcategoryId) query = query.eq('subcategory_id', filters.subcategoryId);
-  if (filters.costCenterId) query = query.eq('cost_center_id', filters.costCenterId);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -203,7 +200,7 @@ export async function createExpense(input: ExpenseInput): Promise<Expense> {
 
   const { data: fullExpense, error: fetchError } = await supabase
     .from('expenses')
-    .select('*, category:expense_categories(*), subcategory:expense_subcategories(*), cost_center:cost_centers(*), supplier_ref:suppliers(*), user:users(*), installments:expense_installments(*)')
+    .select('*, category:expense_categories(*, cost_center:cost_centers(*)), subcategory:expense_subcategories(*), supplier_ref:suppliers(*), user:users(*), installments:expense_installments(*)')
     .eq('id', expense.id)
     .single();
   if (fetchError) throw fetchError;
@@ -220,7 +217,7 @@ export async function updateExpense(id: string, input: Partial<ExpenseInput>): P
     .from('expenses')
     .update(updatePayload)
     .eq('id', id)
-    .select('*, category:expense_categories(*), subcategory:expense_subcategories(*), cost_center:cost_centers(*), supplier_ref:suppliers(*), user:users(*), installments:expense_installments(*)')
+    .select('*, category:expense_categories(*, cost_center:cost_centers(*)), subcategory:expense_subcategories(*), supplier_ref:suppliers(*), user:users(*), installments:expense_installments(*)')
     .single();
   if (error) throw error;
   return data;
@@ -282,7 +279,7 @@ export async function recalculateInstallments(
   // Fetch updated expense
   const { data: fullExpense, error: fetchError } = await supabase
     .from('expenses')
-    .select('*, category:expense_categories(*), subcategory:expense_subcategories(*), cost_center:cost_centers(*), supplier_ref:suppliers(*), user:users(*), installments:expense_installments(*)')
+    .select('*, category:expense_categories(*, cost_center:cost_centers(*)), subcategory:expense_subcategories(*), supplier_ref:suppliers(*), user:users(*), installments:expense_installments(*)')
     .eq('id', expenseId)
     .single();
   if (fetchError) throw fetchError;

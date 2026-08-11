@@ -30,7 +30,7 @@ async function fetchMonthData(month: number, year: number) {
       .lte('revenue_date', endDate),
     supabase
       .from('expenses')
-      .select('*, cost_center:cost_centers(name), installments:expense_installments!inner(*)')
+      .select('*, category:expense_categories(cost_center:cost_centers(name)), installments:expense_installments!inner(*)')
       .eq('installments.competence_month', month)
       .eq('installments.competence_year', year)
       .neq('confirmation_status', 'pending_confirmation'),
@@ -61,7 +61,8 @@ async function fetchMonthData(month: number, year: number) {
   let retiradas = 0;
   const categoryTotals: Record<string, number> = {};
   for (const expense of expenses) {
-    const isWithdrawal = normalizeCostCenterName((expense.cost_center as unknown as { name: string } | null)?.name) === WITHDRAWAL_COST_CENTER;
+    const category = expense.category as unknown as { cost_center: { name: string } | null } | null;
+    const isWithdrawal = normalizeCostCenterName(category?.cost_center?.name) === WITHDRAWAL_COST_CENTER;
     for (const inst of (expense.installments ?? [])) {
       const instMonth = inst.competence_month ?? expense.competence_month;
       const instYear = inst.competence_year ?? expense.competence_year;
@@ -247,7 +248,7 @@ export async function fetchCostCenterDistribution(
 ): Promise<{ name: string; value: number }[]> {
   const { data, error } = await supabase
     .from('expenses')
-    .select('cost_center:cost_centers(name), installments:expense_installments!inner(competence_month, competence_year, amount)')
+    .select('category:expense_categories(cost_center:cost_centers(name)), installments:expense_installments!inner(competence_month, competence_year, amount)')
     .eq('installments.competence_month', competenceMonth)
     .eq('installments.competence_year', competenceYear)
     .neq('confirmation_status', 'pending_confirmation');
@@ -255,7 +256,8 @@ export async function fetchCostCenterDistribution(
 
   const grouped: Record<string, number> = {};
   for (const e of data ?? []) {
-    const ccName = (e.cost_center as unknown as { name: string })?.name ?? 'Sem centro';
+    const category = e.category as unknown as { cost_center: { name: string } | null } | null;
+    const ccName = category?.cost_center?.name ?? 'Sem centro';
     for (const inst of (e.installments as unknown as { competence_month: number; competence_year: number; amount: number }[]) ?? []) {
       if (inst.competence_month === competenceMonth && inst.competence_year === competenceYear) {
         grouped[ccName] = (grouped[ccName] || 0) + Number(inst.amount);

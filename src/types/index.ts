@@ -110,7 +110,6 @@ export interface Expense {
   supplier_id: string | null;
   category_id: string;
   subcategory_id: string | null;
-  cost_center_id: string;
   description: string | null;
   total_amount: number;
   installment_count: number;
@@ -124,9 +123,9 @@ export interface Expense {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** category.cost_center_id (via category.cost_center) is the source of truth for the expense's cost center — expenses no longer store their own. */
   category?: ExpenseCategory;
   subcategory?: ExpenseSubcategory | null;
-  cost_center?: CostCenter;
   supplier_ref?: Supplier | null;
   user?: User | null;
   installments?: ExpenseInstallment[];
@@ -137,7 +136,6 @@ export interface RecurringExpense {
   description: string;
   category_id: string;
   subcategory_id: string | null;
-  cost_center_id: string;
   supplier_id: string | null;
   supplier: string | null;
   due_day: number;
@@ -152,9 +150,9 @@ export interface RecurringExpense {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** category.cost_center_id (via category.cost_center) is the source of truth for the cost center — expenses no longer store their own. */
   category?: ExpenseCategory;
   subcategory?: ExpenseSubcategory | null;
-  cost_center?: CostCenter;
 }
 
 export interface ExpenseInstallment {
@@ -270,13 +268,6 @@ export interface AuditLog {
 
 export interface RevenueWithCategory extends Revenue {
   category: RevenueCategory;
-}
-
-export interface ExpenseWithRelations extends Expense {
-  category: ExpenseCategory;
-  cost_center: CostCenter;
-  subcategory: ExpenseSubcategory | null;
-  installments: ExpenseInstallment[];
 }
 
 export interface DashboardKPIs {

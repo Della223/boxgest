@@ -9,6 +9,7 @@ import ErrorState from '../components/ui/ErrorState';
 import { Skeleton } from '../components/ui/Skeleton';
 import Badge from '../components/ui/Badge';
 import { createAuditLog } from '../services/audit.service';
+import { logChanges } from '../services/change-history.service';
 import { formatDate } from '../utils/format';
 import {
   updateRevenueMainCategory, deleteRevenueMainCategory, checkRevenueMainCategoryInUse,
@@ -193,8 +194,12 @@ export default function ConfiguracoesScreen() {
         }
       } else if (activeTab === 'despesa-categorias') {
         if (editingItem) {
-          await updateExpenseCategory(editingItem.id, { name: formName.trim(), cost_center_id: formCostCenter || null });
-          await createAuditLog(auditUser, 'configuracoes', 'update', editingItem.id, null, { name: formName.trim() });
+          const original = expenseCategories.find((c) => c.id === editingItem.id);
+          const oldValues = { name: original?.name ?? null, cost_center_id: original?.cost_center_id ?? null };
+          const newValues = { name: formName.trim(), cost_center_id: formCostCenter || null };
+          await updateExpenseCategory(editingItem.id, newValues);
+          await logChanges('expense_categories', editingItem.id, auditUser, oldValues, newValues);
+          await createAuditLog(auditUser, 'configuracoes', 'update', editingItem.id, oldValues, newValues);
           toast.success('Categoria atualizada com sucesso.');
         } else {
           await createExpenseCategory(formName.trim(), formCostCenter || undefined);
