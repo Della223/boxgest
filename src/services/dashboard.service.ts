@@ -5,8 +5,14 @@ import type { DashboardKPIs } from '../types';
 
 // Retiradas de sócio não são despesa operacional da loja — ficam fora de
 // "despesa"/"resultado" em todo o Dashboard/Home, expostas à parte.
+// Deduções (ex.: categoria "Imposto sobre vendas", lançada manualmente no
+// Centro de Custo "Deduções") tem a mesma natureza de um imposto sobre
+// vendas — reduz a receita, não é despesa operacional. Mesmo tratamento da
+// dedução automática da Localiza (netAmount): sai de "despesa" e entra como
+// redução de "receita", mantendo Resultado/Margem consistentes com o DRE.
 // Comparação normalizada — ver utils/costCenter.ts.
 const WITHDRAWAL_COST_CENTER = normalizeCostCenterName('Retiradas de Sócio');
+const DEDUCTION_COST_CENTER = normalizeCostCenterName('Deduções');
 
 function getPreviousMonth(month: number, year: number): { month: number; year: number } {
   if (month === 1) return { month: 12, year: year - 1 };
@@ -59,16 +65,21 @@ async function fetchMonthData(month: number, year: number) {
 
   let despesa = 0;
   let retiradas = 0;
+  let deducoesDespesa = 0;
   const categoryTotals: Record<string, number> = {};
   for (const expense of expenses) {
     const category = expense.category as unknown as { cost_center: { name: string } | null } | null;
-    const isWithdrawal = normalizeCostCenterName(category?.cost_center?.name) === WITHDRAWAL_COST_CENTER;
+    const ccNormalized = normalizeCostCenterName(category?.cost_center?.name);
+    const isWithdrawal = ccNormalized === WITHDRAWAL_COST_CENTER;
+    const isDeduction = ccNormalized === DEDUCTION_COST_CENTER;
     for (const inst of (expense.installments ?? [])) {
       const instMonth = inst.competence_month ?? expense.competence_month;
       const instYear = inst.competence_year ?? expense.competence_year;
       if (instMonth === month && instYear === year) {
         if (isWithdrawal) {
           retiradas += Number(inst.amount);
+        } else if (isDeduction) {
+          deducoesDespesa += Number(inst.amount);
         } else {
           despesa += Number(inst.amount);
           categoryTotals[expense.category_id] = (categoryTotals[expense.category_id] || 0) + Number(inst.amount);
@@ -76,6 +87,12 @@ async function fetchMonthData(month: number, year: number) {
       }
     }
   }
+
+  // Dedução lançada como despesa (ex.: Imposto sobre Vendas) reduz a
+  // receita líquida e soma no mesmo total informativo da dedução
+  // automática — mesma origem contábil, fontes de dado diferentes.
+  receita -= deducoesDespesa;
+  deducoesReceita += deducoesDespesa;
 
   return { receita, despesa, retiradas, quantidadeVendas, categoryTotals, revenues, deducoesReceita };
 }

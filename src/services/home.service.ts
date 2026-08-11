@@ -20,8 +20,11 @@ export interface HomeData {
 
 // Same exclusion as dashboard.service.ts — retiradas de sócio não são
 // despesa operacional, então não podem entrar na baseline de comparação.
+// Deduções (ex.: Imposto sobre Vendas) também saem da despesa e reduzem a
+// receita da baseline, mesmo tratamento do mês corrente.
 // Comparação normalizada — ver utils/costCenter.ts.
 const WITHDRAWAL_COST_CENTER = normalizeCostCenterName('Retiradas de Sócio');
+const DEDUCTION_COST_CENTER = normalizeCostCenterName('Deduções');
 
 function getLastDayOfMonth(month: number, year: number): number {
   return new Date(year, month, 0).getDate();
@@ -54,22 +57,28 @@ function computeEquivalentPeriodBaseline(
   const prevStartDate = `${prev.year}-${String(prev.month).padStart(2, '0')}-01`;
   const prevEndDate = `${prev.year}-${String(prev.month).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`;
 
-  const receitaMesAnterior = revenues
+  const receitaMesAnteriorBruta = revenues
     .filter((r) => r.revenue_date >= prevStartDate && r.revenue_date <= prevEndDate)
     .reduce((s, r) => s + netAmount(Number(r.amount), r.main_category?.deduction_rate), 0);
 
   let despesaMesAnterior = 0;
+  let deducoesDespesaMesAnterior = 0;
   for (const e of expenses) {
     if (e.confirmation_status === 'pending_confirmation') continue;
-    if (normalizeCostCenterName(e.category?.cost_center?.name) === WITHDRAWAL_COST_CENTER) continue;
+    const ccNormalized = normalizeCostCenterName(e.category?.cost_center?.name);
+    if (ccNormalized === WITHDRAWAL_COST_CENTER) continue;
+    const isDeduction = ccNormalized === DEDUCTION_COST_CENTER;
     for (const inst of e.installments ?? []) {
       const instMonth = inst.competence_month ?? e.competence_month;
       const instYear = inst.competence_year ?? e.competence_year;
       if (instMonth === prev.month && instYear === prev.year && inst.due_date <= prevEndDate) {
-        despesaMesAnterior += Number(inst.amount);
+        if (isDeduction) deducoesDespesaMesAnterior += Number(inst.amount);
+        else despesaMesAnterior += Number(inst.amount);
       }
     }
   }
+
+  const receitaMesAnterior = receitaMesAnteriorBruta - deducoesDespesaMesAnterior;
 
   return { receitaMesAnterior, despesaMesAnterior };
 }

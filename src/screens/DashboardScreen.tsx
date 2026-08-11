@@ -75,7 +75,7 @@ export default function DashboardScreen() {
       ['Projeção', formatCurrency(kpis.projecao)],
       ['Ticket Médio', formatCurrency(kpis.ticketMedio)],
       ['Quantidade de Vendas', kpis.quantidadeVendas],
-      ['Deduções de Receita (Antecipação)', formatCurrency(kpis.deducoesReceita)],
+      ['Deduções de Receita', formatCurrency(kpis.deducoesReceita)],
     ];
     downloadCSV('dashboard.csv', headers, rows);
     toast.success('Exportação concluída com sucesso.');
@@ -134,7 +134,7 @@ export default function DashboardScreen() {
         <KPICard title="Ticket Médio" value={formatCurrency(kpis?.ticketMedio ?? 0)} icon={ShoppingCart} iconColor="text-accent-600" iconBg="bg-accent-50" />
         <KPICard title="Qtd. Vendas" value={String(kpis?.quantidadeVendas ?? 0)} icon={ShoppingCart} iconColor="text-secondary-600" iconBg="bg-secondary-50" />
         <KPICard
-          title="Deduções de Receita (Antecipação)"
+          title="Deduções de Receita"
           value={formatCurrency(kpis?.deducoesReceita ?? 0)}
           icon={Percent}
           iconColor="text-warning-600"

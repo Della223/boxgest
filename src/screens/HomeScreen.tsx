@@ -160,17 +160,17 @@ export default function HomeScreen() {
         </div>
       )}
 
-      {/* Deduções de Receita (antecipação de recebíveis) — já refletidas em Receita/Resultado, exibidas à parte para transparência */}
+      {/* Deduções de Receita (antecipação de recebíveis + impostos sobre vendas) — já refletidas em Receita/Resultado, exibidas à parte para transparência */}
       {data.kpis.deducoesReceita > 0 && (
         <div className="card p-4 border border-ink-200 bg-ink-50/50">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Percent className="h-4 w-4 text-ink-500" />
-              <span className="text-sm font-medium text-ink-700">Deduções de Receita no Mês (Antecipação)</span>
+              <span className="text-sm font-medium text-ink-700">Deduções de Receita no Mês</span>
             </div>
             <span className="text-sm font-semibold text-ink-900">{formatCurrency(data.kpis.deducoesReceita)}</span>
           </div>
-          <p className="mt-1 text-xs text-ink-400">Taxa de antecipação de recebíveis (ex.: Localiza) — já descontada da Receita e do Resultado do Mês acima.</p>
+          <p className="mt-1 text-xs text-ink-400">Antecipação de recebíveis (ex.: Localiza) + impostos sobre vendas (ex.: ISS/ICMS) — já descontados da Receita e do Resultado do Mês acima. Detalhamento por origem disponível no DRE.</p>
         </div>
       )}
 
