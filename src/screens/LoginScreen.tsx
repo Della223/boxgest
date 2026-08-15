@@ -4,7 +4,11 @@ import { useAuth } from '../context/AuthContext';
 
 type Mode = 'login' | 'recovery';
 
-export default function LoginScreen() {
+interface LoginScreenProps {
+  onShowSignup: () => void;
+}
+
+export default function LoginScreen({ onShowSignup }: LoginScreenProps) {
   const { signIn, resetPassword } = useAuth();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -176,13 +180,20 @@ export default function LoginScreen() {
               </button>
 
               {mode === 'login' && (
-                <div className="text-center">
+                <div className="text-center space-y-2">
                   <button
                     type="button"
                     onClick={() => { setMode('recovery'); setError(null); }}
-                    className="text-sm text-ink-500 hover:text-primary-600 transition-colors"
+                    className="text-sm text-ink-500 hover:text-primary-600 transition-colors block w-full"
                   >
                     Esqueceu sua senha?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onShowSignup}
+                    className="text-sm text-ink-500 hover:text-primary-600 transition-colors block w-full"
+                  >
+                    Ainda não tem uma conta? <span className="font-medium text-primary-600">Criar oficina</span>
                   </button>
                 </div>
               )}

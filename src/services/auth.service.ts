@@ -22,8 +22,16 @@ export async function hasAdminUser(): Promise<boolean> {
   return (data ?? []).length > 0;
 }
 
-export async function bootstrapAdmin(
-  name: string,
+/**
+ * Cria uma nova oficina (tenant) isolada com seu primeiro usuário administrador.
+ * Chamado depois de um supabase.auth.signUp() bem-sucedido: a função no banco
+ * (create_workshop_and_admin, SECURITY DEFINER) cria a oficina, vincula o usuário
+ * autenticado como admin dela, e semeia categorias/centros de custo/tipos de
+ * cliente padrão para o novo cliente não começar do zero.
+ */
+export async function createWorkshopAndAdmin(
+  workshopName: string,
+  adminName: string,
   email: string,
   password: string
 ): Promise<{ error: string | null }> {
@@ -35,16 +43,13 @@ export async function bootstrapAdmin(
   if (authError) return { error: authError.message };
   if (!authData.user) return { error: 'Falha ao criar usuário de autenticação.' };
 
-  const { error: profileError } = await supabase.from('users').insert({
-    auth_id: authData.user.id,
-    name,
-    email,
-    role: 'admin',
-    active: true,
+  const { error: rpcError } = await supabase.rpc('create_workshop_and_admin', {
+    p_workshop_name: workshopName,
+    p_admin_name: adminName,
   });
 
-  if (profileError) {
-    return { error: 'Erro ao criar perfil: ' + profileError.message };
+  if (rpcError) {
+    return { error: 'Erro ao criar oficina: ' + rpcError.message };
   }
 
   await supabase.auth.signOut();
@@ -57,6 +62,22 @@ export async function createUserByAdmin(
   password: string,
   role: string
 ): Promise<{ error: string | null }> {
+  // Resolve o workshop do admin que está criando o convite ANTES do signUp,
+  // porque signUp troca a sessão ativa para o usuário recém-criado — depois
+  // disso não dá mais para confiar em "quem está logado" para saber a oficina certa.
+  const { data: sessionData } = await supabase.auth.getSession();
+  const currentAuthId = sessionData.session?.user?.id;
+  if (!currentAuthId) return { error: 'Sessão expirada. Faça login novamente.' };
+
+  const { data: currentProfile, error: profileLookupError } = await supabase
+    .from('users')
+    .select('workshop_id')
+    .eq('auth_id', currentAuthId)
+    .single();
+  if (profileLookupError || !currentProfile) {
+    return { error: 'Não foi possível identificar sua oficina.' };
+  }
+
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
@@ -65,16 +86,17 @@ export async function createUserByAdmin(
   if (authError) return { error: authError.message };
   if (!authData.user) return { error: 'Falha ao criar usuário.' };
 
-  const { error: profileError } = await supabase.from('users').insert({
+  const { error: insertError } = await supabase.from('users').insert({
     auth_id: authData.user.id,
+    workshop_id: currentProfile.workshop_id,
     name,
     email,
     role,
     active: true,
   });
 
-  if (profileError) {
-    return { error: 'Erro ao criar perfil: ' + profileError.message };
+  if (insertError) {
+    return { error: 'Erro ao criar perfil: ' + insertError.message };
   }
 
   return { error: null };

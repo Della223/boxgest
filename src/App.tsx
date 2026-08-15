@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/ui/Toast';
 import SplashScreen from './components/SplashScreen';
 import LoginScreen from './screens/LoginScreen';
-import BootstrapAdminScreen from './screens/BootstrapAdminScreen';
+import SignupScreen from './screens/SignupScreen';
 import AppShell from './components/AppShell';
 import GlobalSearch from './components/GlobalSearch';
 import HomeScreen from './screens/HomeScreen';
@@ -19,11 +19,12 @@ import AjudaScreen from './screens/AjudaScreen';
 import { type ScreenId } from './config/navigation';
 
 function AppContent() {
-  const { user, loading, needsBootstrap, bootstrapLoading } = useAuth();
+  const { user, loading } = useAuth();
   const [screen, setScreen] = useState<ScreenId>('home');
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const [showSignup, setShowSignup] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 1500);
@@ -56,7 +57,7 @@ function AppContent() {
 
   if (showSplash) return <SplashScreen />;
 
-  if (bootstrapLoading || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-ink-50">
         <div className="flex flex-col items-center gap-3">
@@ -67,8 +68,17 @@ function AppContent() {
     );
   }
 
-  if (needsBootstrap) return <BootstrapAdminScreen />;
-  if (!user) return <LoginScreen />;
+  if (!user) {
+    if (showSignup) {
+      return (
+        <SignupScreen
+          onCreated={() => setShowSignup(false)}
+          onBack={() => setShowSignup(false)}
+        />
+      );
+    }
+    return <LoginScreen onShowSignup={() => setShowSignup(true)} />;
+  }
 
   const renderScreen = () => {
     switch (screen) {

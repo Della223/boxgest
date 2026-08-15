@@ -16,14 +16,11 @@ export interface AppUser {
 interface AuthContextValue {
   user: AppUser | null;
   loading: boolean;
-  needsBootstrap: boolean;
-  bootstrapLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
   refreshUser: () => Promise<void>;
-  checkBootstrap: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -37,8 +34,6 @@ function getInitials(name: string): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [needsBootstrap, setNeedsBootstrap] = useState(true);
-  const [bootstrapLoading, setBootstrapLoading] = useState(true);
 
   const loadUserProfile = async (authId: string, email: string): Promise<AppUser | null> => {
     const { data, error } = await supabase
@@ -57,29 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: data.role as UserRole,
       avatarInitials: getInitials(data.name),
     };
-  };
-
-  const checkBootstrap = async () => {
-    setBootstrapLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id')
-        .eq('role', 'admin')
-        .eq('active', true)
-        .not('auth_id', 'is', null)
-        .limit(1);
-
-      if (error) {
-        setNeedsBootstrap(true);
-      } else {
-        setNeedsBootstrap((data ?? []).length === 0);
-      }
-    } catch {
-      setNeedsBootstrap(true);
-    } finally {
-      setBootstrapLoading(false);
-    }
   };
 
   const refreshUser = async () => {
@@ -101,8 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const init = async () => {
-      await checkBootstrap();
-
       const { data: sessionData } = await supabase.auth.getSession();
       if (!mounted) return;
 
@@ -176,14 +146,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
-        needsBootstrap,
-        bootstrapLoading,
         signIn,
         signOut,
         resetPassword,
         updatePassword,
         refreshUser,
-        checkBootstrap,
       }}
     >
       {children}
