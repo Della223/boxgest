@@ -12,7 +12,6 @@ import {
 } from '../services/recurring-expense.service';
 import { getCurrentCompetence, getCompetenceString, formatDate, formatCurrency } from '../utils/format';
 import ExecutivePanel from '../components/home/ExecutivePanel';
-import TodayPanel from '../components/home/TodayPanel';
 import ManagerAssistant from '../components/home/ManagerAssistant';
 import type { Expense } from '../types';
 
@@ -176,9 +175,6 @@ export default function HomeScreen() {
 
       {/* 3. Assistente Gerencial */}
       <ManagerAssistant insights={data.insights} />
-
-      {/* 4. Requer Atenção + 5. Destaques Positivos */}
-      <TodayPanel insights={data.insights} />
 
       {/* Confirm Recurring Occurrence Modal */}
       <Modal

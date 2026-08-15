@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Download, FileText, ChevronRight, ChevronDown } from 'lucide-react';
+import { Download, FileText, ChevronRight, ChevronDown, Info } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
@@ -9,6 +9,19 @@ import { formatCurrency, formatPercent, getCurrentCompetence, getPreviousCompete
 import type { DREData, DREExpenseCostCenterGroup } from '../types';
 
 type DRERowType = 'header' | 'category' | 'subcategory' | 'subsubcategory' | 'subtotal' | 'total' | 'memo';
+
+// Explicações em linguagem simples para quem não tem formação contábil, exibidas como tooltip ao lado do rótulo.
+const DRE_GLOSSARY: Record<string, string> = {
+  'receita-bruta': 'Tudo que você vendeu no período, antes de qualquer desconto.',
+  'deducoes': 'Valores descontados automaticamente da venda, como taxa de antecipação de recebíveis de frotas/seguradoras.',
+  'receita-liquida': 'Quanto realmente entrou, depois dos descontos automáticos acima.',
+  'custos-diretos': 'O que você gastou diretamente para poder vender, como peças compradas de fornecedor.',
+  'lucro-bruto': 'O que sobra da venda depois de descontar o que foi gasto para vender.',
+  'despesas-operacionais': 'Gastos do dia a dia da oficina (aluguel, contas, pessoal etc.), fora o que entrou como custo direto da venda.',
+  'resultado-operacional': 'O que sobra depois de pagar tudo que é do negócio, ainda sem descontar impostos sobre o lucro.',
+  'ir-csll': 'Impostos cobrados sobre o resultado da oficina.',
+  'resultado-liquido': 'O lucro final do período, depois de todos os descontos e despesas.',
+};
 
 interface DRERow {
   key: string;
@@ -309,6 +322,10 @@ export default function DREScreen() {
         </div>
       </div>
 
+      <p className="text-sm text-ink-500 -mt-2">
+        O DRE mostra, passo a passo, quanto entrou, quanto saiu e quanto sobrou no período — da receita bruta até o lucro final. Passe o mouse no ícone <Info className="inline h-3.5 w-3.5 -mt-0.5" /> ao lado de cada linha para uma explicação rápida.
+      </p>
+
       {!hasData ? (
         <EmptyState title="Não existem dados para a competência selecionada." description="Registre receitas e despesas para gerar a demonstração." icon={<FileText className="h-8 w-8 text-ink-400" />} />
       ) : (
@@ -367,6 +384,11 @@ export default function DREScreen() {
                             <span className="inline-block w-3.5" />
                           ) : null}
                           <span className={row.expandable ? 'hover:underline' : ''}>{row.label}</span>
+                          {DRE_GLOSSARY[row.key] && (
+                            <span title={DRE_GLOSSARY[row.key]} className="inline-flex">
+                              <Info className="h-3.5 w-3.5 flex-shrink-0 text-ink-400 cursor-help" />
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className={`px-6 py-3 text-sm text-right whitespace-nowrap ${isTotal ? 'font-bold' : isHeader ? 'font-semibold' : ''} ${isMemo ? 'text-ink-600' : isPositive ? 'text-ink-900' : 'text-error-600'}`}>
