@@ -15,6 +15,7 @@ import OrcamentosScreen from './screens/OrcamentosScreen';
 import RelatoriosScreen from './screens/RelatoriosScreen';
 import GestaoUsuariosScreen from './screens/GestaoUsuariosScreen';
 import ConfiguracoesScreen from './screens/ConfiguracoesScreen';
+import AjudaScreen from './screens/AjudaScreen';
 import { type ScreenId } from './config/navigation';
 
 function AppContent() {
@@ -80,6 +81,7 @@ function AppContent() {
       case 'relatorios': return <RelatoriosScreen />;
       case 'usuarios': return <GestaoUsuariosScreen />;
       case 'configuracoes': return <ConfiguracoesScreen />;
+      case 'ajuda': return <AjudaScreen />;
       default: return <HomeScreen refreshKey={homeRefreshKey} />;
     }
   };
