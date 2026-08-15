@@ -74,9 +74,9 @@ export default function RelatoriosScreen() {
         // Uma venda pode ter vários itens (subcategorias) — o relatório detalha por item.
         rows = data.flatMap((r: Revenue) =>
           (r.items ?? []).map((item) => [
-            formatDate(r.revenue_date), r.main_category?.name ?? '-', item.subcategory?.name ?? '-', item.quantity,
+            formatDate(r.revenue_date), item.subcategory?.main_category?.name ?? '-', item.subcategory?.name ?? '-', item.quantity,
             formatCurrency(Number(item.amount)),
-            formatCurrency(netAmount(Number(item.amount), r.main_category?.deduction_rate)),
+            formatCurrency(netAmount(Number(item.amount), item.subcategory?.main_category?.deduction_rate)),
             item.quantity > 0 ? formatCurrency(Number(item.amount) / item.quantity) : '-',
             r.notes ?? '-', r.user?.name ?? '-',
           ])
@@ -139,7 +139,11 @@ export default function RelatoriosScreen() {
         const [revs, exps] = await Promise.all([fetchRevenues({}), fetchExpenses({})]);
         title = `Fluxo Financeiro — ${getCompetenceString(filterMonth, filterYear)}`;
         headers = ['Data', 'Tipo', 'Descrição', 'Valor'];
-        const revRows = revs.map((r: Revenue) => [formatDate(r.revenue_date), 'Receita', r.main_category?.name ?? '-', formatCurrency(Number(r.amount))]);
+        const revRows = revs.map((r: Revenue) => [
+          formatDate(r.revenue_date), 'Receita',
+          r.main_category?.name ?? (r.items?.length ? 'Múltiplas categorias' : '-'),
+          formatCurrency(Number(r.amount)),
+        ]);
         const expRows = exps.flatMap((e: Expense) =>
           (e.installments ?? []).map((i) => [
             formatDate(i.payment_date ?? i.due_date), 'Despesa', `${e.supplier ?? '-'} (${i.installment_number}/${e.installment_count})`,
@@ -166,11 +170,13 @@ export default function RelatoriosScreen() {
         headers = ['Categoria', 'Total Bruto', 'Total Líquido', 'Quantidade'];
         const grouped: Record<string, { total: number; totalLiquido: number; qty: number }> = {};
         for (const r of revs) {
-          const cat = r.main_category?.name ?? '-';
-          if (!grouped[cat]) grouped[cat] = { total: 0, totalLiquido: 0, qty: 0 };
-          grouped[cat].total += Number(r.amount);
-          grouped[cat].totalLiquido += netAmount(Number(r.amount), r.main_category?.deduction_rate);
-          grouped[cat].qty += r.quantity;
+          for (const item of (r.items ?? [])) {
+            const cat = item.subcategory?.main_category?.name ?? '-';
+            if (!grouped[cat]) grouped[cat] = { total: 0, totalLiquido: 0, qty: 0 };
+            grouped[cat].total += Number(item.amount);
+            grouped[cat].totalLiquido += netAmount(Number(item.amount), item.subcategory?.main_category?.deduction_rate);
+            grouped[cat].qty += item.quantity;
+          }
         }
         rows = Object.entries(grouped).map(([cat, data]) => [cat, formatCurrency(data.total), formatCurrency(data.totalLiquido), data.qty]);
       } else if (reportId === 'centros-custo') {

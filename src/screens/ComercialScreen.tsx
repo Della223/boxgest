@@ -37,6 +37,7 @@ interface FilterState {
 }
 
 interface SaleItemForm {
+  main_category_id: string;
   subcategory_id: string;
   quantity: number;
   amount: string;
@@ -54,11 +55,16 @@ function getDefaultFilters(): FilterState {
 }
 
 function blankItem(): SaleItemForm {
-  return { subcategory_id: '', quantity: 1, amount: '' };
+  return { main_category_id: '', subcategory_id: '', quantity: 1, amount: '' };
 }
 
 function itemsTotal(items: SaleItemForm[]): number {
   return items.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+}
+
+function saleCategoryLabel(r: Revenue): string {
+  if (r.main_category?.name) return r.main_category.name;
+  return (r.items?.length ?? 0) > 0 ? 'Múltiplas categorias' : '-';
 }
 
 type ItemsSetter = React.Dispatch<React.SetStateAction<SaleItemForm[]>>;
@@ -103,14 +109,13 @@ export default function ComercialScreen() {
     competence_month: 0,
     competence_year: 0,
     revenue_date: '',
-    main_category_id: '',
     client_type_id: '',
     notes: '',
   });
   const [items, setItems] = useState<SaleItemForm[]>([blankItem()]);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [showNewSubcategory, setShowNewSubcategory] = useState(false);
+  const [newSubcategoryForIndex, setNewSubcategoryForIndex] = useState<number | null>(null);
   const [newSubcategoryName, setNewSubcategoryName] = useState('');
   const [creatingSubcategory, setCreatingSubcategory] = useState(false);
 
@@ -154,16 +159,11 @@ export default function ComercialScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Subcategories available for the sale's chosen main category
-  const formSubcategories = useMemo(() => {
-    if (!form.main_category_id) return [];
-    return subcategories.filter((s) => s.main_category_id === form.main_category_id);
-  }, [subcategories, form.main_category_id]);
-
-  const recalcSubcategories = useMemo(() => {
-    if (!recalcTarget?.main_category_id) return [];
-    return subcategories.filter((s) => s.main_category_id === recalcTarget.main_category_id);
-  }, [subcategories, recalcTarget]);
+  // Subcategorias disponíveis para uma categoria principal específica (usado por item, já que cada item da venda pode ter sua própria categoria).
+  const subcategoriesFor = useCallback((mainCategoryId: string) => {
+    if (!mainCategoryId) return [];
+    return subcategories.filter((s) => s.main_category_id === mainCategoryId);
+  }, [subcategories]);
 
   // Filter subcategories for filter bar
   const filterSubcategories = useMemo(() => {
@@ -173,7 +173,7 @@ export default function ComercialScreen() {
 
   const filteredRevenues = useMemo(() => {
     return revenues.filter((r) => {
-      if (filters.mainCategoryId && r.main_category_id !== filters.mainCategoryId) return false;
+      if (filters.mainCategoryId && !(r.items ?? []).some((i) => i.subcategory?.main_category_id === filters.mainCategoryId)) return false;
       if (filters.subcategoryId && !(r.items ?? []).some((i) => i.subcategory_id === filters.subcategoryId)) return false;
       if (dateStart && r.revenue_date < dateStart) return false;
       if (dateEnd && r.revenue_date > dateEnd) return false;
@@ -181,8 +181,8 @@ export default function ComercialScreen() {
         const search = filters.searchText.toLowerCase();
         if (
           !r.notes?.toLowerCase().includes(search) &&
-          !r.main_category?.name.toLowerCase().includes(search) &&
-          !(r.items ?? []).some((i) => i.subcategory?.name.toLowerCase().includes(search))
+          !(r.items ?? []).some((i) => i.subcategory?.name.toLowerCase().includes(search)) &&
+          !(r.items ?? []).some((i) => i.subcategory?.main_category?.name.toLowerCase().includes(search))
         ) return false;
       }
       return true;
@@ -215,13 +215,12 @@ export default function ComercialScreen() {
       competence_month: month,
       competence_year: year,
       revenue_date: new Date().toISOString().split('T')[0],
-      main_category_id: '',
       client_type_id: '',
       notes: '',
     });
     setItems([blankItem()]);
     setFormErrors({});
-    setShowNewSubcategory(false);
+    setNewSubcategoryForIndex(null);
     setNewSubcategoryName('');
     setModalOpen(true);
   };
@@ -232,26 +231,32 @@ export default function ComercialScreen() {
       competence_month: revenue.competence_month ?? getCurrentCompetence().month,
       competence_year: revenue.competence_year ?? getCurrentCompetence().year,
       revenue_date: revenue.revenue_date,
-      main_category_id: revenue.main_category_id ?? '',
       client_type_id: revenue.client_type_id ?? '',
       notes: revenue.notes ?? '',
     });
-    setItems((revenue.items ?? []).map((i) => ({ subcategory_id: i.subcategory_id, quantity: i.quantity, amount: String(i.amount) })));
+    setItems((revenue.items ?? []).map((i) => ({
+      main_category_id: i.subcategory?.main_category_id ?? '',
+      subcategory_id: i.subcategory_id,
+      quantity: i.quantity,
+      amount: String(i.amount),
+    })));
     setFormErrors({});
-    setShowNewSubcategory(false);
+    setNewSubcategoryForIndex(null);
     setNewSubcategoryName('');
     setModalOpen(true);
   };
 
-  const handleCreateSubcategory = async () => {
-    if (!form.main_category_id) return;
+  const handleCreateSubcategory = async (index: number) => {
+    const mainCategoryId = items[index]?.main_category_id;
+    if (!mainCategoryId) return;
     const name = newSubcategoryName.trim();
     if (!name) return;
     setCreatingSubcategory(true);
     try {
-      const created = await createRevenueSubcategory(form.main_category_id, name);
+      const created = await createRevenueSubcategory(mainCategoryId, name);
       setSubcategories((prev) => [...prev, created]);
-      setShowNewSubcategory(false);
+      changeItem(setItems, index, { subcategory_id: created.id });
+      setNewSubcategoryForIndex(null);
       setNewSubcategoryName('');
       toast.success('Subcategoria criada com sucesso.');
     } catch {
@@ -264,6 +269,7 @@ export default function ComercialScreen() {
   const validateItems = (list: SaleItemForm[], errors: Record<string, string>) => {
     if (list.length === 0) errors.items = 'Adicione pelo menos um item.';
     list.forEach((item, i) => {
+      if (!item.main_category_id) errors[`item_${i}_category`] = 'Categoria é obrigatória.';
       if (!item.subcategory_id) errors[`item_${i}_subcategory`] = 'Subcategoria é obrigatória.';
       if (item.quantity < 0) errors[`item_${i}_quantity`] = 'Quantidade deve ser maior ou igual a zero.';
       if (!item.amount || Number(item.amount) <= 0) errors[`item_${i}_amount`] = 'Valor deve ser maior que zero.';
@@ -275,7 +281,6 @@ export default function ComercialScreen() {
     if (!form.competence_month || !form.competence_year) errors.competence = 'Competência é obrigatória.';
     if (!form.revenue_date) errors.revenue_date = 'Data é obrigatória.';
     else if (form.revenue_date > new Date().toISOString().split('T')[0]) errors.revenue_date = 'Data não pode ser futura.';
-    if (!form.main_category_id) errors.main_category_id = 'Categoria principal é obrigatória.';
     if (!editingRevenue) validateItems(items, errors);
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -292,7 +297,6 @@ export default function ComercialScreen() {
           competence_month: editingRevenue.competence_month,
           competence_year: editingRevenue.competence_year,
           revenue_date: editingRevenue.revenue_date,
-          main_category_id: editingRevenue.main_category_id,
           client_type_id: editingRevenue.client_type_id,
           notes: editingRevenue.notes,
         };
@@ -300,7 +304,6 @@ export default function ComercialScreen() {
           competence_month: form.competence_month,
           competence_year: form.competence_year,
           revenue_date: form.revenue_date,
-          main_category_id: form.main_category_id,
           client_type_id: form.client_type_id || null,
           notes: form.notes || null,
         };
@@ -309,7 +312,6 @@ export default function ComercialScreen() {
           revenue_date: form.revenue_date,
           competence_month: form.competence_month,
           competence_year: form.competence_year,
-          main_category_id: form.main_category_id,
           client_type_id: form.client_type_id || null,
           notes: form.notes || null,
         });
@@ -318,6 +320,7 @@ export default function ComercialScreen() {
         toast.success('Venda atualizada com sucesso.');
       } else {
         const itemInputs = items.map((item) => ({
+          main_category_id: item.main_category_id,
           subcategory_id: item.subcategory_id,
           quantity: Number(item.quantity),
           amount: Number(item.amount),
@@ -326,7 +329,6 @@ export default function ComercialScreen() {
           revenue_date: form.revenue_date,
           competence_month: form.competence_month,
           competence_year: form.competence_year,
-          main_category_id: form.main_category_id,
           client_type_id: form.client_type_id || null,
           notes: form.notes || undefined,
           created_by: auditUser ?? undefined,
@@ -361,7 +363,12 @@ export default function ComercialScreen() {
 
   const handleOpenRecalc = (revenue: Revenue) => {
     setRecalcTarget(revenue);
-    setRecalcItems((revenue.items ?? []).map((i) => ({ subcategory_id: i.subcategory_id, quantity: i.quantity, amount: String(i.amount) })));
+    setRecalcItems((revenue.items ?? []).map((i) => ({
+      main_category_id: i.subcategory?.main_category_id ?? '',
+      subcategory_id: i.subcategory_id,
+      quantity: i.quantity,
+      amount: String(i.amount),
+    })));
     setRecalcErrors({});
   };
 
@@ -379,6 +386,7 @@ export default function ComercialScreen() {
         amount: recalcTarget.amount,
       };
       const itemInputs = recalcItems.map((item) => ({
+        main_category_id: item.main_category_id,
         subcategory_id: item.subcategory_id,
         quantity: Number(item.quantity),
         amount: Number(item.amount),
@@ -421,11 +429,11 @@ export default function ComercialScreen() {
       (r.items ?? []).map((item) => [
         r.competence_month && r.competence_year ? `${String(r.competence_month).padStart(2, '0')}/${r.competence_year}` : '-',
         formatDate(r.revenue_date),
-        r.main_category?.name ?? '-',
+        item.subcategory?.main_category?.name ?? '-',
         item.subcategory?.name ?? '-',
         item.quantity,
         formatCurrency(Number(item.amount)),
-        formatCurrency(netAmount(Number(item.amount), r.main_category?.deduction_rate)),
+        formatCurrency(netAmount(Number(item.amount), item.subcategory?.main_category?.deduction_rate)),
         r.notes ?? '',
         r.user?.name ?? '-',
       ])
@@ -576,7 +584,7 @@ export default function ComercialScreen() {
                           {r.competence_month && r.competence_year ? `${String(r.competence_month).padStart(2, '0')}/${r.competence_year}` : '-'}
                         </td>
                         <td className="px-4 py-3 text-sm text-ink-700 whitespace-nowrap">{formatDate(r.revenue_date)}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-ink-900">{r.main_category?.name ?? '-'}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-ink-900">{saleCategoryLabel(r)}</td>
                         <td className="px-4 py-3 text-sm">
                           <button
                             onClick={() => toggleExpand(r.id)}
@@ -588,7 +596,7 @@ export default function ComercialScreen() {
                           </button>
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-ink-900 text-right whitespace-nowrap">{formatCurrency(Number(r.amount))}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-ink-700 text-right whitespace-nowrap">{formatCurrency(netAmount(Number(r.amount), r.main_category?.deduction_rate))}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-ink-700 text-right whitespace-nowrap">{formatCurrency(saleItems.reduce((s, item) => s + netAmount(Number(item.amount), item.subcategory?.main_category?.deduction_rate), 0))}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
                             <button onClick={() => setViewTarget(r)} className="p-1.5 text-ink-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors" title="Visualizar">
@@ -615,7 +623,8 @@ export default function ComercialScreen() {
                             <table className="min-w-full">
                               <thead>
                                 <tr>
-                                  <th className="pb-1.5 pl-6 text-left text-xs font-semibold text-ink-500">Subcategoria</th>
+                                  <th className="pb-1.5 pl-6 text-left text-xs font-semibold text-ink-500">Categoria</th>
+                                  <th className="pb-1.5 text-left text-xs font-semibold text-ink-500">Subcategoria</th>
                                   <th className="pb-1.5 text-right text-xs font-semibold text-ink-500">Qtd.</th>
                                   <th className="pb-1.5 text-right text-xs font-semibold text-ink-500">Valor Bruto</th>
                                   <th className="pb-1.5 pr-4 text-right text-xs font-semibold text-ink-500">Valor Líquido</th>
@@ -624,10 +633,11 @@ export default function ComercialScreen() {
                               <tbody>
                                 {saleItems.map((item) => (
                                   <tr key={item.id}>
-                                    <td className="py-1 pl-6 text-sm text-ink-700">{item.subcategory?.name ?? '-'}</td>
+                                    <td className="py-1 pl-6 text-sm text-ink-600">{item.subcategory?.main_category?.name ?? '-'}</td>
+                                    <td className="py-1 text-sm text-ink-700">{item.subcategory?.name ?? '-'}</td>
                                     <td className="py-1 text-sm text-ink-600 text-right">{item.quantity}</td>
                                     <td className="py-1 text-sm font-medium text-ink-900 text-right">{formatCurrency(Number(item.amount))}</td>
-                                    <td className="py-1 pr-4 text-sm font-medium text-ink-700 text-right">{formatCurrency(netAmount(Number(item.amount), r.main_category?.deduction_rate))}</td>
+                                    <td className="py-1 pr-4 text-sm font-medium text-ink-700 text-right">{formatCurrency(netAmount(Number(item.amount), item.subcategory?.main_category?.deduction_rate))}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -697,21 +707,6 @@ export default function ComercialScreen() {
             {formErrors.revenue_date && <p className="mt-1 text-xs text-error-600">{formErrors.revenue_date}</p>}
           </div>
 
-          {/* Categoria Principal */}
-          <div>
-            <label className="block text-sm font-medium text-ink-700 mb-1.5">Categoria Principal *</label>
-            <select
-              value={form.main_category_id}
-              onChange={(e) => setForm({ ...form, main_category_id: e.target.value })}
-              className="input-field"
-              disabled={!!editingRevenue}
-            >
-              <option value="">Selecione...</option>
-              {mainCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            {formErrors.main_category_id && <p className="mt-1 text-xs text-error-600">{formErrors.main_category_id}</p>}
-          </div>
-
           {/* Tipo de Cliente */}
           <div>
             <label className="block text-sm font-medium text-ink-700 mb-1.5">Tipo de Cliente</label>
@@ -742,75 +737,23 @@ export default function ComercialScreen() {
             </div>
           ) : (
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-ink-700">Itens da Venda *</label>
-                {form.main_category_id && !showNewSubcategory && (
-                  <button type="button" onClick={() => setShowNewSubcategory(true)} className="text-xs font-medium text-accent-600 hover:text-accent-700">
-                    + Nova subcategoria
-                  </button>
-                )}
-              </div>
+              <label className="block text-sm font-medium text-ink-700 mb-1.5">Itens da Venda *</label>
+              <p className="text-xs text-ink-400 mb-2">Adicione um item para cada tipo de produto/serviço da venda (ex.: Peças, Pneus, Mão de obra).</p>
 
-              {showNewSubcategory && (
-                <div className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    autoFocus
-                    value={newSubcategoryName}
-                    onChange={(e) => setNewSubcategoryName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateSubcategory(); } }}
-                    placeholder="Nome da nova subcategoria"
-                    className="input-field flex-1"
-                  />
-                  <button type="button" onClick={handleCreateSubcategory} disabled={creatingSubcategory || !newSubcategoryName.trim()} className="btn-primary whitespace-nowrap">
-                    Criar
-                  </button>
-                  <button type="button" onClick={() => { setShowNewSubcategory(false); setNewSubcategoryName(''); }} className="btn-secondary">
-                    Cancelar
-                  </button>
-                </div>
-              )}
-
-              {!form.main_category_id ? (
-                <p className="text-xs text-ink-400">Selecione a categoria principal para adicionar itens.</p>
-              ) : (
-                <div className="space-y-2">
-                  {items.map((item, i) => (
-                    <div key={i} className="flex items-start gap-2">
+              <div className="space-y-3">
+                {items.map((item, i) => (
+                  <div key={i} className="rounded-lg ring-1 ring-ink-200 p-3 space-y-2">
+                    <div className="flex items-start gap-2">
                       <div className="flex-1">
                         <select
-                          value={item.subcategory_id}
-                          onChange={(e) => changeItem(setItems, i, { subcategory_id: e.target.value })}
+                          value={item.main_category_id}
+                          onChange={(e) => changeItem(setItems, i, { main_category_id: e.target.value, subcategory_id: '' })}
                           className="input-field"
                         >
-                          <option value="">Subcategoria...</option>
-                          {formSubcategories.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          <option value="">Categoria...</option>
+                          {mainCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
-                        {formErrors[`item_${i}_subcategory`] && <p className="mt-1 text-xs text-error-600">{formErrors[`item_${i}_subcategory`]}</p>}
-                      </div>
-                      <div className="w-20">
-                        <input
-                          type="number"
-                          min={0}
-                          max={9999}
-                          value={item.quantity}
-                          onChange={(e) => changeItem(setItems, i, { quantity: Number(e.target.value) })}
-                          className="input-field"
-                          placeholder="Qtd."
-                        />
-                        {formErrors[`item_${i}_quantity`] && <p className="mt-1 text-xs text-error-600">Inválida</p>}
-                      </div>
-                      <div className="w-32">
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={item.amount}
-                          onChange={(e) => changeItem(setItems, i, { amount: e.target.value })}
-                          className="input-field"
-                          placeholder="Valor"
-                        />
-                        {formErrors[`item_${i}_amount`] && <p className="mt-1 text-xs text-error-600">Inválido</p>}
+                        {formErrors[`item_${i}_category`] && <p className="mt-1 text-xs text-error-600">{formErrors[`item_${i}_category`]}</p>}
                       </div>
                       <button
                         type="button"
@@ -822,17 +765,87 @@ export default function ComercialScreen() {
                         <X className="h-4 w-4" />
                       </button>
                     </div>
-                  ))}
-                  {formErrors.items && <p className="text-xs text-error-600">{formErrors.items}</p>}
-                  <button type="button" onClick={() => addItem(setItems)} className="btn-secondary">
-                    <Plus className="h-4 w-4" />
-                    Adicionar Item
-                  </button>
-                  <div className="rounded-lg bg-primary-50 p-3">
-                    <p className="text-sm font-semibold text-primary-700">Total da venda: {formatCurrency(itemsTotal(items))}</p>
+
+                    {item.main_category_id && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <select
+                              value={item.subcategory_id}
+                              onChange={(e) => changeItem(setItems, i, { subcategory_id: e.target.value })}
+                              className="input-field"
+                            >
+                              <option value="">Subcategoria...</option>
+                              {subcategoriesFor(item.main_category_id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                            {formErrors[`item_${i}_subcategory`] && <p className="mt-1 text-xs text-error-600">{formErrors[`item_${i}_subcategory`]}</p>}
+                          </div>
+                          {newSubcategoryForIndex !== i && (
+                            <button type="button" onClick={() => { setNewSubcategoryForIndex(i); setNewSubcategoryName(''); }} className="ml-2 text-xs font-medium text-accent-600 hover:text-accent-700 whitespace-nowrap">
+                              + Nova subcategoria
+                            </button>
+                          )}
+                        </div>
+
+                        {newSubcategoryForIndex === i && (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={newSubcategoryName}
+                              onChange={(e) => setNewSubcategoryName(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateSubcategory(i); } }}
+                              placeholder="Nome da nova subcategoria"
+                              className="input-field flex-1"
+                            />
+                            <button type="button" onClick={() => handleCreateSubcategory(i)} disabled={creatingSubcategory || !newSubcategoryName.trim()} className="btn-primary whitespace-nowrap">
+                              Criar
+                            </button>
+                            <button type="button" onClick={() => { setNewSubcategoryForIndex(null); setNewSubcategoryName(''); }} className="btn-secondary">
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="flex items-start gap-2">
+                          <div className="w-24">
+                            <input
+                              type="number"
+                              min={0}
+                              max={9999}
+                              value={item.quantity}
+                              onChange={(e) => changeItem(setItems, i, { quantity: Number(e.target.value) })}
+                              className="input-field"
+                              placeholder="Qtd."
+                            />
+                            {formErrors[`item_${i}_quantity`] && <p className="mt-1 text-xs text-error-600">Inválida</p>}
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={item.amount}
+                              onChange={(e) => changeItem(setItems, i, { amount: e.target.value })}
+                              className="input-field"
+                              placeholder="Valor"
+                            />
+                            {formErrors[`item_${i}_amount`] && <p className="mt-1 text-xs text-error-600">Inválido</p>}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
+                ))}
+                {formErrors.items && <p className="text-xs text-error-600">{formErrors.items}</p>}
+                <button type="button" onClick={() => addItem(setItems)} className="btn-secondary">
+                  <Plus className="h-4 w-4" />
+                  Adicionar Item
+                </button>
+                <div className="rounded-lg bg-primary-50 p-3">
+                  <p className="text-sm font-semibold text-primary-700">Total da venda: {formatCurrency(itemsTotal(items))}</p>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -861,12 +874,34 @@ export default function ComercialScreen() {
           <div className="space-y-4">
             <div className="rounded-lg bg-accent-50 border border-accent-200 p-3">
               <p className="text-xs text-accent-800">
-                Todos os itens existentes serão substituídos pela lista abaixo. A venda em si (data, competência, categoria principal) não é alterada aqui.
+                Todos os itens existentes serão substituídos pela lista abaixo. A venda em si (data, competência, tipo de cliente) não é alterada aqui.
               </p>
             </div>
             <div className="space-y-2">
               {recalcItems.map((item, i) => (
-                <div key={i} className="flex items-start gap-2">
+                <div key={i} className="rounded-lg ring-1 ring-ink-200 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <select
+                        value={item.main_category_id}
+                        onChange={(e) => changeItem(setRecalcItems, i, { main_category_id: e.target.value, subcategory_id: '' })}
+                        className="input-field"
+                      >
+                        <option value="">Categoria...</option>
+                        {mainCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      {recalcErrors[`item_${i}_category`] && <p className="mt-1 text-xs text-error-600">{recalcErrors[`item_${i}_category`]}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(setRecalcItems, i)}
+                      disabled={recalcItems.length <= 1}
+                      className="p-2.5 text-ink-400 hover:text-error-600 hover:bg-error-50 rounded-md transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                      title="Remover item"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                   <div className="flex-1">
                     <select
                       value={item.subcategory_id}
@@ -874,43 +909,36 @@ export default function ComercialScreen() {
                       className="input-field"
                     >
                       <option value="">Subcategoria...</option>
-                      {recalcSubcategories.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {subcategoriesFor(item.main_category_id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                     {recalcErrors[`item_${i}_subcategory`] && <p className="mt-1 text-xs text-error-600">{recalcErrors[`item_${i}_subcategory`]}</p>}
                   </div>
-                  <div className="w-20">
-                    <input
-                      type="number"
-                      min={0}
-                      max={9999}
-                      value={item.quantity}
-                      onChange={(e) => changeItem(setRecalcItems, i, { quantity: Number(e.target.value) })}
-                      className="input-field"
-                      placeholder="Qtd."
-                    />
-                    {recalcErrors[`item_${i}_quantity`] && <p className="mt-1 text-xs text-error-600">Inválida</p>}
+                  <div className="flex items-start gap-2">
+                    <div className="w-24">
+                      <input
+                        type="number"
+                        min={0}
+                        max={9999}
+                        value={item.quantity}
+                        onChange={(e) => changeItem(setRecalcItems, i, { quantity: Number(e.target.value) })}
+                        className="input-field"
+                        placeholder="Qtd."
+                      />
+                      {recalcErrors[`item_${i}_quantity`] && <p className="mt-1 text-xs text-error-600">Inválida</p>}
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={item.amount}
+                        onChange={(e) => changeItem(setRecalcItems, i, { amount: e.target.value })}
+                        className="input-field"
+                        placeholder="Valor"
+                      />
+                      {recalcErrors[`item_${i}_amount`] && <p className="mt-1 text-xs text-error-600">Inválido</p>}
+                    </div>
                   </div>
-                  <div className="w-32">
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={item.amount}
-                      onChange={(e) => changeItem(setRecalcItems, i, { amount: e.target.value })}
-                      className="input-field"
-                      placeholder="Valor"
-                    />
-                    {recalcErrors[`item_${i}_amount`] && <p className="mt-1 text-xs text-error-600">Inválido</p>}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(setRecalcItems, i)}
-                    disabled={recalcItems.length <= 1}
-                    className="p-2.5 text-ink-400 hover:text-error-600 hover:bg-error-50 rounded-md transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                    title="Remover item"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
                 </div>
               ))}
               {recalcErrors.items && <p className="text-xs text-error-600">{recalcErrors.items}</p>}
@@ -933,10 +961,10 @@ export default function ComercialScreen() {
             <div className="space-y-3">
               <div className="flex justify-between"><span className="text-sm text-ink-500">Competência:</span><span className="text-sm font-medium text-ink-900">{viewTarget.competence_month && viewTarget.competence_year ? `${String(viewTarget.competence_month).padStart(2, '0')}/${viewTarget.competence_year}` : '-'}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Data:</span><span className="text-sm font-medium text-ink-900">{formatDate(viewTarget.revenue_date)}</span></div>
-              <div className="flex justify-between"><span className="text-sm text-ink-500">Categoria Principal:</span><span className="text-sm font-medium text-ink-900">{viewTarget.main_category?.name ?? '-'}</span></div>
+              <div className="flex justify-between"><span className="text-sm text-ink-500">Categoria Principal:</span><span className="text-sm font-medium text-ink-900">{saleCategoryLabel(viewTarget)}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Tipo de Cliente:</span><span className="text-sm font-medium text-ink-900">{viewTarget.client_type?.name ?? '-'}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Valor Bruto:</span><span className="text-sm font-bold text-ink-900">{formatCurrency(Number(viewTarget.amount))}</span></div>
-              <div className="flex justify-between"><span className="text-sm text-ink-500">Valor Líquido:</span><span className="text-sm font-bold text-ink-700">{formatCurrency(netAmount(Number(viewTarget.amount), viewTarget.main_category?.deduction_rate))}</span></div>
+              <div className="flex justify-between"><span className="text-sm text-ink-500">Valor Líquido:</span><span className="text-sm font-bold text-ink-700">{formatCurrency((viewTarget.items ?? []).reduce((s, item) => s + netAmount(Number(item.amount), item.subcategory?.main_category?.deduction_rate), 0))}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Usuário:</span><span className="text-sm font-medium text-ink-900">{viewTarget.user?.name ?? '-'}</span></div>
               {viewTarget.notes && <div><span className="text-sm text-ink-500">Observações:</span><p className="mt-1 text-sm text-ink-900">{viewTarget.notes}</p></div>}
             </div>
@@ -946,6 +974,7 @@ export default function ComercialScreen() {
                 <table className="min-w-full divide-y divide-ink-200">
                   <thead className="bg-ink-50">
                     <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-ink-500">Categoria</th>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-ink-500">Subcategoria</th>
                       <th className="px-3 py-2 text-right text-xs font-semibold text-ink-500">Qtd.</th>
                       <th className="px-3 py-2 text-right text-xs font-semibold text-ink-500">Valor Bruto</th>
@@ -955,10 +984,11 @@ export default function ComercialScreen() {
                   <tbody className="divide-y divide-ink-100">
                     {(viewTarget.items ?? []).map((item) => (
                       <tr key={item.id}>
+                        <td className="px-3 py-2 text-sm text-ink-600">{item.subcategory?.main_category?.name ?? '-'}</td>
                         <td className="px-3 py-2 text-sm text-ink-700">{item.subcategory?.name ?? '-'}</td>
                         <td className="px-3 py-2 text-sm text-right">{item.quantity}</td>
                         <td className="px-3 py-2 text-sm text-right font-medium">{formatCurrency(Number(item.amount))}</td>
-                        <td className="px-3 py-2 text-sm text-right font-medium text-ink-700">{formatCurrency(netAmount(Number(item.amount), viewTarget.main_category?.deduction_rate))}</td>
+                        <td className="px-3 py-2 text-sm text-right font-medium text-ink-700">{formatCurrency(netAmount(Number(item.amount), item.subcategory?.main_category?.deduction_rate))}</td>
                       </tr>
                     ))}
                   </tbody>

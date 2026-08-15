@@ -55,7 +55,13 @@ function computeEquivalentPeriodBaseline(
 
   const receitaMesAnteriorBruta = revenues
     .filter((r) => r.revenue_date >= prevStartDate && r.revenue_date <= prevEndDate)
-    .reduce((s, r) => s + netAmount(Number(r.amount), r.main_category?.deduction_rate), 0);
+    .reduce((sum, r) => {
+      const itemsNet = (r.items ?? []).reduce(
+        (s, item) => s + netAmount(Number(item.amount), item.subcategory?.main_category?.deduction_rate),
+        0
+      );
+      return sum + itemsNet;
+    }, 0);
 
   let despesaMesAnterior = 0;
   for (const e of expenses) {

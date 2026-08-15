@@ -66,7 +66,7 @@ export async function fetchDRE(
   const [revenuesResult, expensesResult] = await Promise.all([
     supabase
       .from('revenues')
-      .select('main_category:revenue_main_categories(name, deduction_rate), items:revenue_items(amount, subcategory:revenue_subcategories(name))')
+      .select('items:revenue_items(amount, subcategory:revenue_subcategories(name, main_category:revenue_main_categories(name, deduction_rate)))')
       .gte('revenue_date', startDate)
       .lte('revenue_date', endDate),
     supabase
@@ -84,19 +84,21 @@ export async function fetchDRE(
   const expenses = expensesResult.data ?? [];
 
   // ---- Receitas: Categoria Principal -> Subcategoria ----
+  // Cada item tem sua própria categoria/taxa de dedução — uma venda pode
+  // misturar categorias diferentes (ex.: Peças + Pneus + Mão de obra na
+  // mesma nota), então o agrupamento é sempre por item, nunca pela venda inteira.
   const receitaMap: Record<string, { amount: number; subcategories: Record<string, number> }> = {};
   const deducoesMap: Record<string, number> = {};
   let receitaBruta = 0;
   let deducoes = 0;
 
   for (const r of revenues) {
-    const mainCategory = r.main_category as unknown as { name: string; deduction_rate: number } | null;
-    const catName = mainCategory?.name ?? 'Sem categoria';
-    if (!receitaMap[catName]) receitaMap[catName] = { amount: 0, subcategories: {} };
-
-    for (const item of (r.items as unknown as { amount: number; subcategory: { name: string } | null }[]) ?? []) {
+    for (const item of (r.items as unknown as { amount: number; subcategory: { name: string; main_category: { name: string; deduction_rate: number } | null } | null }[]) ?? []) {
+      const mainCategory = item.subcategory?.main_category ?? null;
+      const catName = mainCategory?.name ?? 'Sem categoria';
       const subName = item.subcategory?.name ?? 'Sem subcategoria';
       const amount = Number(item.amount);
+      if (!receitaMap[catName]) receitaMap[catName] = { amount: 0, subcategories: {} };
       receitaMap[catName].amount += amount;
       receitaMap[catName].subcategories[subName] = (receitaMap[catName].subcategories[subName] || 0) + amount;
       receitaBruta += amount;

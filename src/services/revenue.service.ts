@@ -14,6 +14,7 @@ export interface RevenueFilters {
 }
 
 export interface RevenueItemInput {
+  main_category_id: string;
   subcategory_id: string;
   quantity: number;
   amount: number;
@@ -23,7 +24,6 @@ export interface RevenueInput {
   revenue_date: string;
   competence_month?: number;
   competence_year?: number;
-  main_category_id: string;
   client_type_id?: string | null;
   notes?: string | null;
   created_by?: string;
@@ -34,18 +34,23 @@ export interface RevenueHeaderInput {
   revenue_date?: string;
   competence_month?: number;
   competence_year?: number;
-  main_category_id?: string;
   client_type_id?: string | null;
   notes?: string | null;
 }
 
 const REVENUE_SELECT =
-  '*, category:revenue_categories(*), main_category:revenue_main_categories(*), subcategory:revenue_subcategories(*), client_type:client_types(*), user:users(*), items:revenue_items(*, subcategory:revenue_subcategories(*))';
+  '*, category:revenue_categories(*), main_category:revenue_main_categories(*), subcategory:revenue_subcategories(*), client_type:client_types(*), user:users(*), items:revenue_items(*, subcategory:revenue_subcategories(*, main_category:revenue_main_categories(*)))';
 
 function sumItems(items: RevenueItemInput[]): { amount: number; quantity: number } {
   const amount = items.reduce((s, i) => s + Number(i.amount), 0);
   const quantity = items.reduce((s, i) => s + Number(i.quantity), 0);
   return { amount, quantity };
+}
+
+/** Header main_category_id is a convenience/display field only now that itens podem ter categorias diferentes — fica preenchido quando todos os itens são da mesma categoria, e null ("Múltiplas categorias") quando misturam categorias. */
+function deriveHeaderMainCategory(items: RevenueItemInput[]): string | null {
+  const ids = new Set(items.map((i) => i.main_category_id));
+  return ids.size === 1 ? items[0].main_category_id : null;
 }
 
 // ============================================================
@@ -172,9 +177,14 @@ export async function fetchRevenueCategories(): Promise<RevenueCategory[]> {
 
 export async function fetchRevenues(filters: RevenueFilters = {}): Promise<Revenue[]> {
   const hasSubcategoryFilter = !!filters.subcategoryId;
-  const itemsJoin = hasSubcategoryFilter
-    ? 'revenue_items!inner(*, subcategory:revenue_subcategories(*))'
-    : 'revenue_items(*, subcategory:revenue_subcategories(*))';
+  const hasMainCategoryFilter = !!filters.mainCategoryId;
+  const needsInnerItems = hasSubcategoryFilter || hasMainCategoryFilter;
+  const subcategoryEmbed = hasMainCategoryFilter
+    ? 'subcategory:revenue_subcategories!inner(*, main_category:revenue_main_categories(*))'
+    : 'subcategory:revenue_subcategories(*, main_category:revenue_main_categories(*))';
+  const itemsJoin = needsInnerItems
+    ? `revenue_items!inner(*, ${subcategoryEmbed})`
+    : `revenue_items(*, ${subcategoryEmbed})`;
 
   let query = supabase
     .from('revenues')
@@ -184,7 +194,7 @@ export async function fetchRevenues(filters: RevenueFilters = {}): Promise<Reven
   if (filters.startDate) query = query.gte('revenue_date', filters.startDate);
   if (filters.endDate) query = query.lte('revenue_date', filters.endDate);
   if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
-  if (filters.mainCategoryId) query = query.eq('main_category_id', filters.mainCategoryId);
+  if (filters.mainCategoryId) query = query.eq('items.subcategory.main_category_id', filters.mainCategoryId);
   if (filters.clientTypeId) query = query.eq('client_type_id', filters.clientTypeId);
   if (filters.subcategoryId) query = query.eq('items.subcategory_id', filters.subcategoryId);
   if (filters.competenceMonth) query = query.eq('competence_month', filters.competenceMonth);
@@ -221,6 +231,7 @@ export async function createRevenue(input: RevenueInput): Promise<Revenue> {
     throw new Error('A venda precisa de pelo menos um item.');
   }
   const { amount, quantity } = sumItems(input.items);
+  const mainCategoryId = deriveHeaderMainCategory(input.items);
 
   const { data: revenue, error: revenueError } = await supabase
     .from('revenues')
@@ -228,7 +239,7 @@ export async function createRevenue(input: RevenueInput): Promise<Revenue> {
       revenue_date: input.revenue_date,
       competence_month: input.competence_month,
       competence_year: input.competence_year,
-      main_category_id: input.main_category_id,
+      main_category_id: mainCategoryId,
       subcategory_id: input.items[0].subcategory_id,
       client_type_id: input.client_type_id ?? null,
       quantity,
@@ -280,10 +291,12 @@ export async function recalculateRevenueItems(revenueId: string, items: RevenueI
   if (delError) throw delError;
 
   const { amount, quantity } = sumItems(items);
+  const mainCategoryId = deriveHeaderMainCategory(items);
   const { error: updError } = await supabase
     .from('revenues')
     .update({
       subcategory_id: items[0].subcategory_id,
+      main_category_id: mainCategoryId,
       quantity,
       amount,
       updated_at: new Date().toISOString(),
