@@ -31,10 +31,10 @@ export default function AppShell({ currentScreen, onNavigate, children }: AppShe
         {/* Logo header */}
         <div className="flex h-16 items-center justify-between px-5 border-b border-ink-800">
           <div className="flex items-center gap-3">
-            <img src="/logo-symbol.png" alt="CarCenter" className="h-9 w-9 object-contain" />
+            <img src="/logo-symbol.png" alt="BoxGest" className="h-9 w-9 object-contain" />
             <div>
-              <p className="text-sm font-bold text-white tracking-tight">CarCenter PRO</p>
-              <p className="text-[10px] text-ink-400 font-medium">Finance 3.0</p>
+              <p className="text-sm font-bold text-white tracking-tight">BoxGest</p>
+              <p className="text-[10px] text-ink-400 font-medium">Gestão Financeira</p>
             </div>
           </div>
           <button
