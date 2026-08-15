@@ -13,13 +13,13 @@ import { KPISkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import KPICard from '../components/ui/KPICard';
 import {
   fetchRevenues, createRevenue, updateRevenueHeader, recalculateRevenueItems, deleteRevenue,
-  fetchRevenueMainCategories, fetchRevenueSubcategories, createRevenueSubcategory,
+  fetchRevenueMainCategories, fetchRevenueSubcategories, createRevenueSubcategory, fetchClientTypes,
 } from '../services/revenue.service';
 import { createAuditLog } from '../services/audit.service';
 import { logChanges, fetchChangeHistory } from '../services/change-history.service';
 import { formatCurrency, formatDate, formatNumber, downloadCSV, getCurrentCompetence } from '../utils/format';
 import { netAmount } from '../utils/deduction';
-import type { Revenue, RevenueMainCategory, RevenueSubcategory, ChangeHistory } from '../types';
+import type { Revenue, RevenueMainCategory, RevenueSubcategory, ClientType, ChangeHistory } from '../types';
 
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -94,6 +94,7 @@ export default function ComercialScreen() {
   const [revenues, setRevenues] = useState<Revenue[]>([]);
   const [mainCategories, setMainCategories] = useState<RevenueMainCategory[]>([]);
   const [subcategories, setSubcategories] = useState<RevenueSubcategory[]>([]);
+  const [clientTypes, setClientTypes] = useState<ClientType[]>([]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -103,6 +104,7 @@ export default function ComercialScreen() {
     competence_year: 0,
     revenue_date: '',
     main_category_id: '',
+    client_type_id: '',
     notes: '',
   });
   const [items, setItems] = useState<SaleItemForm[]>([blankItem()]);
@@ -133,14 +135,16 @@ export default function ComercialScreen() {
     setLoading(true);
     setError(false);
     try {
-      const [revs, mcats, scats] = await Promise.all([
+      const [revs, mcats, scats, ctypes] = await Promise.all([
         fetchRevenues({}),
         fetchRevenueMainCategories(),
         fetchRevenueSubcategories(),
+        fetchClientTypes(),
       ]);
       setRevenues(revs);
       setMainCategories(mcats);
       setSubcategories(scats);
+      setClientTypes(ctypes);
     } catch {
       setError(true);
     } finally {
@@ -212,6 +216,7 @@ export default function ComercialScreen() {
       competence_year: year,
       revenue_date: new Date().toISOString().split('T')[0],
       main_category_id: '',
+      client_type_id: '',
       notes: '',
     });
     setItems([blankItem()]);
@@ -228,6 +233,7 @@ export default function ComercialScreen() {
       competence_year: revenue.competence_year ?? getCurrentCompetence().year,
       revenue_date: revenue.revenue_date,
       main_category_id: revenue.main_category_id ?? '',
+      client_type_id: revenue.client_type_id ?? '',
       notes: revenue.notes ?? '',
     });
     setItems((revenue.items ?? []).map((i) => ({ subcategory_id: i.subcategory_id, quantity: i.quantity, amount: String(i.amount) })));
@@ -287,6 +293,7 @@ export default function ComercialScreen() {
           competence_year: editingRevenue.competence_year,
           revenue_date: editingRevenue.revenue_date,
           main_category_id: editingRevenue.main_category_id,
+          client_type_id: editingRevenue.client_type_id,
           notes: editingRevenue.notes,
         };
         const newValues: Record<string, unknown> = {
@@ -294,6 +301,7 @@ export default function ComercialScreen() {
           competence_year: form.competence_year,
           revenue_date: form.revenue_date,
           main_category_id: form.main_category_id,
+          client_type_id: form.client_type_id || null,
           notes: form.notes || null,
         };
 
@@ -302,6 +310,7 @@ export default function ComercialScreen() {
           competence_month: form.competence_month,
           competence_year: form.competence_year,
           main_category_id: form.main_category_id,
+          client_type_id: form.client_type_id || null,
           notes: form.notes || null,
         });
         await logChanges('revenues', editingRevenue.id, auditUser, oldValues, newValues);
@@ -318,6 +327,7 @@ export default function ComercialScreen() {
           competence_month: form.competence_month,
           competence_year: form.competence_year,
           main_category_id: form.main_category_id,
+          client_type_id: form.client_type_id || null,
           notes: form.notes || undefined,
           created_by: auditUser ?? undefined,
           items: itemInputs,
@@ -702,6 +712,19 @@ export default function ComercialScreen() {
             {formErrors.main_category_id && <p className="mt-1 text-xs text-error-600">{formErrors.main_category_id}</p>}
           </div>
 
+          {/* Tipo de Cliente */}
+          <div>
+            <label className="block text-sm font-medium text-ink-700 mb-1.5">Tipo de Cliente</label>
+            <select
+              value={form.client_type_id}
+              onChange={(e) => setForm({ ...form, client_type_id: e.target.value })}
+              className="input-field"
+            >
+              <option value="">Não informado</option>
+              {clientTypes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+
           {/* Itens */}
           {editingRevenue ? (
             <div>
@@ -911,6 +934,7 @@ export default function ComercialScreen() {
               <div className="flex justify-between"><span className="text-sm text-ink-500">Competência:</span><span className="text-sm font-medium text-ink-900">{viewTarget.competence_month && viewTarget.competence_year ? `${String(viewTarget.competence_month).padStart(2, '0')}/${viewTarget.competence_year}` : '-'}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Data:</span><span className="text-sm font-medium text-ink-900">{formatDate(viewTarget.revenue_date)}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Categoria Principal:</span><span className="text-sm font-medium text-ink-900">{viewTarget.main_category?.name ?? '-'}</span></div>
+              <div className="flex justify-between"><span className="text-sm text-ink-500">Tipo de Cliente:</span><span className="text-sm font-medium text-ink-900">{viewTarget.client_type?.name ?? '-'}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Valor Bruto:</span><span className="text-sm font-bold text-ink-900">{formatCurrency(Number(viewTarget.amount))}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Valor Líquido:</span><span className="text-sm font-bold text-ink-700">{formatCurrency(netAmount(Number(viewTarget.amount), viewTarget.main_category?.deduction_rate))}</span></div>
               <div className="flex justify-between"><span className="text-sm text-ink-500">Usuário:</span><span className="text-sm font-medium text-ink-900">{viewTarget.user?.name ?? '-'}</span></div>

@@ -34,6 +34,13 @@ export interface RevenueCategory {
   created_at: string;
 }
 
+export interface ClientType {
+  id: string;
+  name: string;
+  active: boolean;
+  created_at: string;
+}
+
 export interface RevenueItem {
   id: string;
   revenue_id: string;
@@ -53,6 +60,7 @@ export interface Revenue {
   category_id: string;
   main_category_id: string | null;
   subcategory_id: string | null;
+  client_type_id: string | null;
   quantity: number;
   amount: number;
   notes: string | null;
@@ -62,6 +70,7 @@ export interface Revenue {
   category?: RevenueCategory;
   main_category?: RevenueMainCategory | null;
   subcategory?: RevenueSubcategory | null;
+  client_type?: ClientType | null;
   user?: User | null;
   items?: RevenueItem[];
 }

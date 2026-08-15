@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Revenue, RevenueCategory, RevenueMainCategory, RevenueSubcategory } from '../types';
+import type { Revenue, RevenueCategory, RevenueMainCategory, RevenueSubcategory, ClientType } from '../types';
 
 export interface RevenueFilters {
   startDate?: string;
@@ -7,6 +7,7 @@ export interface RevenueFilters {
   categoryId?: string;
   mainCategoryId?: string;
   subcategoryId?: string;
+  clientTypeId?: string;
   competenceMonth?: number;
   competenceYear?: number;
   searchText?: string;
@@ -23,6 +24,7 @@ export interface RevenueInput {
   competence_month?: number;
   competence_year?: number;
   main_category_id: string;
+  client_type_id?: string | null;
   notes?: string | null;
   created_by?: string;
   items: RevenueItemInput[];
@@ -33,11 +35,12 @@ export interface RevenueHeaderInput {
   competence_month?: number;
   competence_year?: number;
   main_category_id?: string;
+  client_type_id?: string | null;
   notes?: string | null;
 }
 
 const REVENUE_SELECT =
-  '*, category:revenue_categories(*), main_category:revenue_main_categories(*), subcategory:revenue_subcategories(*), user:users(*), items:revenue_items(*, subcategory:revenue_subcategories(*))';
+  '*, category:revenue_categories(*), main_category:revenue_main_categories(*), subcategory:revenue_subcategories(*), client_type:client_types(*), user:users(*), items:revenue_items(*, subcategory:revenue_subcategories(*))';
 
 function sumItems(items: RevenueItemInput[]): { amount: number; quantity: number } {
   const amount = items.reduce((s, i) => s + Number(i.amount), 0);
@@ -73,6 +76,40 @@ export async function createRevenueMainCategory(name: string): Promise<RevenueMa
 export async function fetchAllRevenueMainCategories(): Promise<RevenueMainCategory[]> {
   const { data, error } = await supabase
     .from('revenue_main_categories')
+    .select('*')
+    .order('name');
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ============================================================
+// Client Types
+// ============================================================
+
+export async function fetchClientTypes(): Promise<ClientType[]> {
+  const { data, error } = await supabase
+    .from('client_types')
+    .select('*')
+    .eq('active', true)
+    .order('name');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createClientType(name: string): Promise<ClientType> {
+  const { data, error } = await supabase
+    .from('client_types')
+    .insert({ name })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** Admin listing — includes inactive, unlike fetchClientTypes (used for dropdowns). */
+export async function fetchAllClientTypes(): Promise<ClientType[]> {
+  const { data, error } = await supabase
+    .from('client_types')
     .select('*')
     .order('name');
   if (error) throw error;
@@ -148,6 +185,7 @@ export async function fetchRevenues(filters: RevenueFilters = {}): Promise<Reven
   if (filters.endDate) query = query.lte('revenue_date', filters.endDate);
   if (filters.categoryId) query = query.eq('category_id', filters.categoryId);
   if (filters.mainCategoryId) query = query.eq('main_category_id', filters.mainCategoryId);
+  if (filters.clientTypeId) query = query.eq('client_type_id', filters.clientTypeId);
   if (filters.subcategoryId) query = query.eq('items.subcategory_id', filters.subcategoryId);
   if (filters.competenceMonth) query = query.eq('competence_month', filters.competenceMonth);
   if (filters.competenceYear) query = query.eq('competence_year', filters.competenceYear);
@@ -192,6 +230,7 @@ export async function createRevenue(input: RevenueInput): Promise<Revenue> {
       competence_year: input.competence_year,
       main_category_id: input.main_category_id,
       subcategory_id: input.items[0].subcategory_id,
+      client_type_id: input.client_type_id ?? null,
       quantity,
       amount,
       notes: input.notes ?? null,
