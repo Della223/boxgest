@@ -178,7 +178,7 @@ export async function fetchRevenues(filters: RevenueFilters = {}): Promise<Reven
 
   let query = supabase
     .from('revenues')
-    .select(`*, category:revenue_categories(*), main_category:revenue_main_categories(*), subcategory:revenue_subcategories(*), user:users(*), items:${itemsJoin}`)
+    .select(`*, category:revenue_categories(*), main_category:revenue_main_categories(*), subcategory:revenue_subcategories(*), client_type:client_types(*), user:users(*), items:${itemsJoin}`)
     .order('revenue_date', { ascending: false });
 
   if (filters.startDate) query = query.gte('revenue_date', filters.startDate);
