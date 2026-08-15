@@ -142,7 +142,7 @@ export default function DREScreen() {
     }
     rows.push({ key: 'receita-liquida', label: '(=) Receita Líquida', value: currentDRE.receitaLiquida, type: 'total', indent: 0 });
 
-    rows.push({ key: 'custos-diretos', label: '(-) Custos Diretos (CPV + CSP)', value: -currentDRE.custosDiretos, type: 'header', indent: 0 });
+    rows.push({ key: 'custos-diretos', label: '(-) Custo Direto', value: -currentDRE.custosDiretos, type: 'header', indent: 0 });
     pushCostCenterGroups(rows, currentDRE.custosDiretosPorCategoria, 'direct', expandedKeys);
     rows.push({ key: 'lucro-bruto', label: '(=) Lucro Bruto', value: currentDRE.lucroBruto, type: 'total', indent: 0 });
 
@@ -150,13 +150,13 @@ export default function DREScreen() {
     pushCostCenterGroups(rows, currentDRE.despesasPorCategoria, 'oper', expandedKeys);
     rows.push({ key: 'resultado-operacional', label: '(=) Resultado Operacional', value: currentDRE.resultadoOperacional, type: 'total', indent: 0 });
 
-    rows.push({ key: 'ir-csll', label: '(-) IR/CSLL', value: -currentDRE.irCsll, type: 'header', indent: 0 });
+    rows.push({ key: 'ir-csll', label: '(-) Impostos', value: -currentDRE.irCsll, type: 'header', indent: 0 });
     pushCostCenterGroups(rows, currentDRE.irCsllPorCategoria, 'tax', expandedKeys);
     rows.push({ key: 'resultado-liquido', label: '(=) Resultado Líquido', value: currentDRE.resultadoLiquido, type: 'total', indent: 0 });
 
     if (currentDRE.retiradas > 0) {
       rows.push({
-        key: 'retiradas', label: 'Memorando: Retiradas de Sócio (não compõe o resultado)', value: currentDRE.retiradas,
+        key: 'retiradas', label: 'Memorando: Retiradas (não compõe o resultado)', value: currentDRE.retiradas,
         type: 'memo', indent: 0,
       });
       pushCostCenterGroups(rows, currentDRE.retiradasPorCategoria, 'withdrawal', expandedKeys, false);
@@ -229,7 +229,7 @@ export default function DREScreen() {
       }
     };
 
-    exportRows.push({ key: 'custos-diretos', label: '(-) Custos Diretos (CPV + CSP)', value: -currentDRE.custosDiretos });
+    exportRows.push({ key: 'custos-diretos', label: '(-) Custo Direto', value: -currentDRE.custosDiretos });
     pushExpenseGroups(currentDRE.custosDiretosPorCategoria, 'direct');
     exportRows.push({ key: 'lucro-bruto', label: '(=) Lucro Bruto', value: currentDRE.lucroBruto });
 
@@ -237,12 +237,12 @@ export default function DREScreen() {
     pushExpenseGroups(currentDRE.despesasPorCategoria, 'oper');
     exportRows.push({ key: 'resultado-operacional', label: '(=) Resultado Operacional', value: currentDRE.resultadoOperacional });
 
-    exportRows.push({ key: 'ir-csll', label: '(-) IR/CSLL', value: -currentDRE.irCsll });
+    exportRows.push({ key: 'ir-csll', label: '(-) Impostos', value: -currentDRE.irCsll });
     pushExpenseGroups(currentDRE.irCsllPorCategoria, 'tax');
     exportRows.push({ key: 'resultado-liquido', label: '(=) Resultado Líquido', value: currentDRE.resultadoLiquido });
 
     if (currentDRE.retiradas > 0) {
-      exportRows.push({ key: 'retiradas', label: 'Memorando: Retiradas de Sócio (não compõe o resultado)', value: currentDRE.retiradas });
+      exportRows.push({ key: 'retiradas', label: 'Memorando: Retiradas (não compõe o resultado)', value: currentDRE.retiradas });
       for (const cc of currentDRE.retiradasPorCategoria) {
         exportRows.push({ key: `withdrawal|${cc.category}`, label: `  ${cc.category}`, value: cc.amount });
         for (const cat of cc.categories) {
