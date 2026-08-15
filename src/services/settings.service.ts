@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { RevenueMainCategory, RevenueSubcategory, ExpenseCategory, ExpenseSubcategory, CostCenter, Supplier } from '../types';
+import type { RevenueMainCategory, RevenueSubcategory, ExpenseCategory, ExpenseSubcategory, CostCenter, Supplier, ClientType } from '../types';
 
 // ============================================================
 // Revenue main categories / subcategories - admin CRUD
@@ -135,6 +135,31 @@ export async function updateCostCenter(id: string, updates: { name?: string; act
 export async function deleteCostCenter(id: string): Promise<void> {
   const { error } = await supabase.from('cost_centers').delete().eq('id', id);
   if (error) throw error;
+}
+
+export async function updateClientType(id: string, updates: { name?: string; active?: boolean }): Promise<ClientType> {
+  const { data, error } = await supabase
+    .from('client_types')
+    .update(updates)
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteClientType(id: string): Promise<void> {
+  const { error } = await supabase.from('client_types').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function checkClientTypeInUse(clientTypeId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('revenues')
+    .select('*', { count: 'exact', head: true })
+    .eq('client_type_id', clientTypeId);
+  if (error) throw error;
+  return (count ?? 0) > 0;
 }
 
 export async function checkExpenseCategoryInUse(categoryId: string): Promise<boolean> {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Power, Tag, Building2, Layers, Calendar, Settings as SettingsIcon, Truck, AtSign } from 'lucide-react';
+import { Plus, Pencil, Trash2, Power, Tag, Building2, Layers, Calendar, Settings as SettingsIcon, Truck, AtSign, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
@@ -19,15 +19,17 @@ import {
   createCostCenter, updateCostCenter, deleteCostCenter,
   checkExpenseCategoryInUse, checkCostCenterInUse,
   createSupplierRecord, updateSupplierRecord, deleteSupplierRecord, checkSupplierInUse,
+  updateClientType, deleteClientType, checkClientTypeInUse,
 } from '../services/settings.service';
 import {
   createRevenueMainCategory, fetchAllRevenueMainCategories,
   createRevenueSubcategory, fetchAllRevenueSubcategories,
+  createClientType, fetchAllClientTypes,
 } from '../services/revenue.service';
 import { fetchAllExpenseCategories, fetchAllSubcategories, fetchAllCostCenters, fetchAllSuppliers } from '../services/expense.service';
-import type { RevenueMainCategory, RevenueSubcategory, ExpenseCategory, ExpenseSubcategory, CostCenter, Supplier } from '../types';
+import type { RevenueMainCategory, RevenueSubcategory, ExpenseCategory, ExpenseSubcategory, CostCenter, Supplier, ClientType } from '../types';
 
-type TabId = 'receita-categorias' | 'receita-subcategorias' | 'despesa-categorias' | 'subcategorias' | 'centros-custo' | 'fornecedores' | 'competencia' | 'sistema';
+type TabId = 'receita-categorias' | 'receita-subcategorias' | 'despesa-categorias' | 'subcategorias' | 'centros-custo' | 'tipos-cliente' | 'fornecedores' | 'competencia' | 'sistema';
 
 const TABS: { id: TabId; label: string; icon: typeof Tag }[] = [
   { id: 'receita-categorias', label: 'Categoria Principal (Receita)', icon: Tag },
@@ -35,6 +37,7 @@ const TABS: { id: TabId; label: string; icon: typeof Tag }[] = [
   { id: 'despesa-categorias', label: 'Categorias de Despesa', icon: Tag },
   { id: 'subcategorias', label: 'Subcategoria (Despesa)', icon: Layers },
   { id: 'centros-custo', label: 'Centros de Custo', icon: Building2 },
+  { id: 'tipos-cliente', label: 'Tipo de Cliente', icon: Users },
   { id: 'fornecedores', label: 'Fornecedores', icon: Truck },
   { id: 'competencia', label: 'Competência', icon: Calendar },
   { id: 'sistema', label: 'Sistema', icon: SettingsIcon },
@@ -64,6 +67,7 @@ export default function ConfiguracoesScreen() {
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [subcategories, setSubcategories] = useState<ExpenseSubcategory[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+  const [clientTypes, setClientTypes] = useState<ClientType[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -80,12 +84,13 @@ export default function ConfiguracoesScreen() {
     setLoading(true);
     setError(false);
     try {
-      const [revMainCats, revSubs, expCats, subs, ccs, sups] = await Promise.all([
+      const [revMainCats, revSubs, expCats, subs, ccs, ctypes, sups] = await Promise.all([
         fetchAllRevenueMainCategories(),
         fetchAllRevenueSubcategories(),
         fetchAllExpenseCategories(),
         fetchAllSubcategories(),
         fetchAllCostCenters(),
+        fetchAllClientTypes(),
         fetchAllSuppliers(),
       ]);
       setRevenueMainCategories(revMainCats);
@@ -93,6 +98,7 @@ export default function ConfiguracoesScreen() {
       setExpenseCategories(expCats);
       setSubcategories(subs);
       setCostCenters(ccs);
+      setClientTypes(ctypes);
       setSuppliers(sups);
     } catch {
       setError(true);
@@ -202,6 +208,16 @@ export default function ConfiguracoesScreen() {
           await createAuditLog(auditUser, 'configuracoes', 'create', undefined, null, { name: formName.trim() });
           toast.success('Centro de custo criado com sucesso.');
         }
+      } else if (activeTab === 'tipos-cliente') {
+        if (editingItem) {
+          await updateClientType(editingItem.id, { name: formName.trim() });
+          await createAuditLog(auditUser, 'configuracoes', 'update', editingItem.id, null, { name: formName.trim() });
+          toast.success('Tipo de cliente atualizado com sucesso.');
+        } else {
+          await createClientType(formName.trim());
+          await createAuditLog(auditUser, 'configuracoes', 'create', undefined, null, { name: formName.trim() });
+          toast.success('Tipo de cliente criado com sucesso.');
+        }
       } else if (activeTab === 'fornecedores') {
         if (editingItem) {
           await updateSupplierRecord(editingItem.id, { name: formName.trim() });
@@ -241,6 +257,9 @@ export default function ConfiguracoesScreen() {
       } else if (type === 'cost-center') {
         await updateCostCenter(id, { active: !active });
         await createAuditLog(auditUser, 'configuracoes', 'update', id, { active }, { active: !active });
+      } else if (type === 'tipo-cliente') {
+        await updateClientType(id, { active: !active });
+        await createAuditLog(auditUser, 'configuracoes', 'update', id, { active }, { active: !active });
       } else if (type === 'fornecedor') {
         await updateSupplierRecord(id, { active: !active });
         await createAuditLog(auditUser, 'configuracoes', 'update', id, { active }, { active: !active });
@@ -274,6 +293,10 @@ export default function ConfiguracoesScreen() {
         const inUse = await checkCostCenterInUse(deleteTarget.id);
         if (inUse) { toast.error('Não é possível excluir um centro de custo em uso.'); return; }
         await deleteCostCenter(deleteTarget.id);
+      } else if (deleteTarget.type === 'tipo-cliente') {
+        const inUse = await checkClientTypeInUse(deleteTarget.id);
+        if (inUse) { toast.error('Não é possível excluir um tipo de cliente vinculado a vendas.'); return; }
+        await deleteClientType(deleteTarget.id);
       } else if (deleteTarget.type === 'fornecedor') {
         const inUse = await checkSupplierInUse(deleteTarget.id);
         if (inUse) { toast.error('Não é possível excluir um fornecedor vinculado a despesas.'); return; }
@@ -314,6 +337,8 @@ export default function ConfiguracoesScreen() {
       }));
     } else if (activeTab === 'centros-custo') {
       items = costCenters.map(c => ({ id: c.id, name: c.name, active: c.active, type: 'cost-center' }));
+    } else if (activeTab === 'tipos-cliente') {
+      items = clientTypes.map(c => ({ id: c.id, name: c.name, active: c.active, type: 'tipo-cliente' }));
     } else if (activeTab === 'fornecedores') {
       items = suppliers.map(s => ({ id: s.id, name: s.name, active: s.active, type: 'fornecedor' }));
     }
@@ -325,6 +350,7 @@ export default function ConfiguracoesScreen() {
         'despesa-categorias': 'Nenhuma categoria de despesa encontrada.',
         'subcategorias': 'Nenhuma subcategoria encontrada.',
         'centros-custo': 'Nenhum centro de custo encontrado.',
+        'tipos-cliente': 'Nenhum tipo de cliente encontrado.',
         'fornecedores': 'Nenhum fornecedor encontrado.',
       };
       return <EmptyState title={labels[activeTab] ?? 'Nenhum registro encontrado.'} actionLabel="Criar novo" onAction={handleOpenNew} />;
@@ -430,7 +456,7 @@ export default function ConfiguracoesScreen() {
     </div>
   );
 
-  const showNewButton = activeTab === 'receita-categorias' || activeTab === 'receita-subcategorias' || activeTab === 'despesa-categorias' || activeTab === 'subcategorias' || activeTab === 'centros-custo' || activeTab === 'fornecedores';
+  const showNewButton = activeTab === 'receita-categorias' || activeTab === 'receita-subcategorias' || activeTab === 'despesa-categorias' || activeTab === 'subcategorias' || activeTab === 'centros-custo' || activeTab === 'tipos-cliente' || activeTab === 'fornecedores';
   const modalTitle = editingItem ? 'Editar Registro' : 'Novo Registro';
 
   return (
