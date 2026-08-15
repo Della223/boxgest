@@ -44,18 +44,18 @@ export default function LoginScreen() {
         />
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div className="flex items-center gap-3">
-            <img src="/logo-symbol.png" alt="CarCenter" className="h-12 w-12 object-contain" />
+            <img src="/logo-symbol.png" alt="BoxGest" className="h-12 w-12 object-contain" />
             <div>
-              <p className="text-lg font-bold tracking-tight">CarCenter PRO</p>
-              <p className="text-xs text-primary-200 font-medium">Finance 3.0</p>
+              <p className="text-lg font-bold tracking-tight">BoxGest</p>
+              <p className="text-xs text-primary-200 font-medium">Gestão Financeira</p>
             </div>
           </div>
           <div className="space-y-6">
             <h1 className="text-4xl font-bold leading-tight tracking-tight">
-              Gestão financeira<br />de ponta a ponta<br />para o seu centro automotivo.
+              Gestão financeira<br />de ponta a ponta<br />para a sua oficina.
             </h1>
             <p className="text-primary-200 text-lg max-w-md">
-              Controle completo de receitas, despesas, comissões, veículos e muito mais — em uma única plataforma.
+              Controle completo de receitas, despesas, comissões e muito mais — em uma única plataforma.
             </p>
             <div className="flex gap-6 pt-4">
               <div className="flex items-center gap-2 text-primary-100">
@@ -68,7 +68,7 @@ export default function LoginScreen() {
               </div>
             </div>
           </div>
-          <p className="text-xs text-primary-300">© 2025 CarCenter PRO. Todos os direitos reservados.</p>
+          <p className="text-xs text-primary-300">© 2026 BoxGest. Todos os direitos reservados.</p>
         </div>
       </div>
 
@@ -76,10 +76,10 @@ export default function LoginScreen() {
       <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-md animate-fade-in">
           <div className="lg:hidden flex items-center gap-3 mb-8">
-            <img src="/logo-symbol.png" alt="CarCenter" className="h-11 w-11 object-contain" />
+            <img src="/logo-symbol.png" alt="BoxGest" className="h-11 w-11 object-contain" />
             <div>
-              <p className="text-base font-bold text-ink-900">CarCenter PRO</p>
-              <p className="text-xs text-ink-500 font-medium">Finance 3.0</p>
+              <p className="text-base font-bold text-ink-900">BoxGest</p>
+              <p className="text-xs text-ink-500 font-medium">Gestão Financeira</p>
             </div>
           </div>
 
