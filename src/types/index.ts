@@ -184,56 +184,6 @@ export interface Budget {
   category?: ExpenseCategory;
 }
 
-export interface MarketingPost {
-  id: string;
-  post_type: 'Story' | 'Feed' | 'Reel' | 'Campanha';
-  reference_date: string;
-  published: boolean;
-  published_by: string | null;
-  published_at: string | null;
-  created_at: string;
-  publisher?: User | null;
-}
-
-export interface MarketingKPIs {
-  id: string;
-  reference_date: string;
-  period_type: 'weekly' | 'monthly';
-  stories_count: number;
-  feed_count: number;
-  reels_count: number;
-  campaigns_count: number;
-  followers: number;
-  reach: number;
-  engagement: number;
-  weekly_goal: number;
-  monthly_goal: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface InstagramIntegration {
-  id: string;
-  instagram_business_id: string | null;
-  facebook_page_id: string | null;
-  access_token: string | null;
-  refresh_token: string | null;
-  token_expires_at: string | null;
-  connected: boolean;
-  connected_at: string | null;
-  disconnected_at: string | null;
-  account_name: string | null;
-  username: string | null;
-  profile_pic_url: string | null;
-  followers_count: number;
-  media_count: number;
-  last_post_date: string | null;
-  last_sync_at: string | null;
-  sync_error: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface HomeInsight {
   id: string;
   type: 'warning' | 'positive' | 'critical' | 'info';

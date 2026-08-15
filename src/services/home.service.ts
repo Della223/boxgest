@@ -1,30 +1,26 @@
 import { fetchDashboardKPIs } from './dashboard.service';
 import { fetchRevenues } from './revenue.service';
 import { fetchExpenses } from './expense.service';
-import { fetchMarketingPosts } from './marketing.service';
 import { fetchBudgets, applyAutomaticBudgets } from './budget.service';
 import { normalizeCostCenterName } from '../utils/costCenter';
 import { netAmount } from '../utils/deduction';
-import type { CalendarDayInfo, HomeInsight, DashboardKPIs, Expense, Revenue, Budget, MarketingPost } from '../types';
+import type { CalendarDayInfo, HomeInsight, DashboardKPIs, Expense, Revenue, Budget } from '../types';
 
 export interface HomeData {
   kpis: DashboardKPIs;
   revenues: Revenue[];
   expenses: Expense[];
   budgets: Budget[];
-  marketing: MarketingPost[];
   calendar: CalendarDayInfo[];
   consecutiveEmptyDays: number;
   insights: HomeInsight[];
 }
 
-// Same exclusion as dashboard.service.ts — retiradas de sócio não são
-// despesa operacional, então não podem entrar na baseline de comparação.
-// Deduções (ex.: Imposto sobre Vendas) também saem da despesa e reduzem a
-// receita da baseline, mesmo tratamento do mês corrente.
+
+// Same exclusion as dashboard.service.ts — retiradas não são despesa
+// operacional, então não podem entrar na baseline de comparação.
 // Comparação normalizada — ver utils/costCenter.ts.
-const WITHDRAWAL_COST_CENTER = normalizeCostCenterName('Retiradas de Sócio');
-const DEDUCTION_COST_CENTER = normalizeCostCenterName('Deduções');
+const WITHDRAWAL_COST_CENTER = normalizeCostCenterName('Retiradas');
 
 function getLastDayOfMonth(month: number, year: number): number {
   return new Date(year, month, 0).getDate();
@@ -62,23 +58,20 @@ function computeEquivalentPeriodBaseline(
     .reduce((s, r) => s + netAmount(Number(r.amount), r.main_category?.deduction_rate), 0);
 
   let despesaMesAnterior = 0;
-  let deducoesDespesaMesAnterior = 0;
   for (const e of expenses) {
     if (e.confirmation_status === 'pending_confirmation') continue;
     const ccNormalized = normalizeCostCenterName(e.category?.cost_center?.name);
     if (ccNormalized === WITHDRAWAL_COST_CENTER) continue;
-    const isDeduction = ccNormalized === DEDUCTION_COST_CENTER;
     for (const inst of e.installments ?? []) {
       const instMonth = inst.competence_month ?? e.competence_month;
       const instYear = inst.competence_year ?? e.competence_year;
       if (instMonth === prev.month && instYear === prev.year && inst.due_date <= prevEndDate) {
-        if (isDeduction) deducoesDespesaMesAnterior += Number(inst.amount);
-        else despesaMesAnterior += Number(inst.amount);
+        despesaMesAnterior += Number(inst.amount);
       }
     }
   }
 
-  const receitaMesAnterior = receitaMesAnteriorBruta - deducoesDespesaMesAnterior;
+  const receitaMesAnterior = receitaMesAnteriorBruta;
 
   return { receitaMesAnterior, despesaMesAnterior };
 }
@@ -163,7 +156,6 @@ export function generateInsights(
   revenues: Revenue[],
   expenses: Expense[],
   budgets: Budget[],
-  marketing: MarketingPost[],
   consecutiveEmptyDays: number
 ): HomeInsight[] {
   const insights: HomeInsight[] = [];
@@ -312,50 +304,7 @@ export function generateInsights(
     });
   }
 
-  // Marketing insights
-  const todayMarketing = marketing.filter((m) => m.reference_date === today);
-  const storyPending = todayMarketing.filter((m) => m.post_type === 'Story' && !m.published);
-  if (isWeekday && storyPending.length > 0) {
-    insights.push({
-      id: 'story-pending',
-      type: 'warning',
-      title: 'Story pendente',
-      description: 'Há postagem de Story pendente para hoje.',
-      priority: 4,
-      icon: 'camera',
-    });
-  }
-
-  const feedPending = todayMarketing.filter((m) => m.post_type === 'Feed' && !m.published);
-  if (isWeekday && feedPending.length > 0) {
-    insights.push({
-      id: 'feed-pending',
-      type: 'warning',
-      title: 'Feed pendente',
-      description: 'Há postagem de Feed pendente para hoje.',
-      priority: 4,
-      icon: 'radio',
-    });
-  }
-
-  // Days without Reel
-  const reels = marketing.filter((m) => m.post_type === 'Reel' && m.published);
-  if (reels.length > 0) {
-    const lastReelDate = reels[0].reference_date;
-    const daysSinceReel = Math.floor((new Date(today).getTime() - new Date(lastReelDate + 'T00:00:00').getTime()) / (1000 * 60 * 60 * 24));
-    if (daysSinceReel > 5) {
-      insights.push({
-        id: 'reels-gap',
-        type: 'warning',
-        title: `${daysSinceReel} dias sem Reel`,
-        description: 'Mais de 5 dias sem publicação de Reels.',
-        priority: 5,
-        icon: 'video',
-      });
-    }
-  }
-
-  return insights.sort((a, b) => a.priority - b.priority);
+  return insights.sort((a, b) => a.priority - b.priority).slice(0, 5);
 }
 
 function formatCurrencyLocal(value: number): string {
@@ -371,11 +320,10 @@ export async function fetchHomeData(month: number, year: number): Promise<HomeDa
   // automatic suggestion (if any) is already there on the first load of the month.
   await applyAutomaticBudgets(year, month);
 
-  const [kpisRaw, revenues, expenses, marketing, budgets] = await Promise.all([
+  const [kpisRaw, revenues, expenses, budgets] = await Promise.all([
     fetchDashboardKPIs(month, year),
     fetchRevenues({ startDate, endDate }),
     fetchExpenses({}),
-    fetchMarketingPosts(),
     fetchBudgets(year, month),
   ]);
 
@@ -406,7 +354,7 @@ export async function fetchHomeData(month: number, year: number): Promise<HomeDa
   };
 
   const { calendar, consecutiveEmptyDays } = await fetchCalendarData(month, year, revenues, expenses);
-  const insights = generateInsights(kpis, revenues, expenses, budgets, marketing, consecutiveEmptyDays);
+  const insights = generateInsights(kpis, revenues, expenses, budgets, consecutiveEmptyDays);
 
-  return { kpis, revenues, expenses, budgets, marketing, calendar, consecutiveEmptyDays, insights };
+  return { kpis, revenues, expenses, budgets, calendar, consecutiveEmptyDays, insights };
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Power, Tag, Building2, Layers, Calendar, Megaphone, Settings as SettingsIcon, Truck, Instagram, Link2, Unlink, RefreshCw, AlertCircle, User, AtSign } from 'lucide-react';
+import { Plus, Pencil, Trash2, Power, Tag, Building2, Layers, Calendar, Settings as SettingsIcon, Truck, AtSign } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import Modal from '../components/ui/Modal';
@@ -25,10 +25,9 @@ import {
   createRevenueSubcategory, fetchAllRevenueSubcategories,
 } from '../services/revenue.service';
 import { fetchAllExpenseCategories, fetchAllSubcategories, fetchAllCostCenters, fetchAllSuppliers } from '../services/expense.service';
-import { fetchInstagramIntegration, disconnectInstagram, getInstagramAuthUrl, syncInstagram } from '../services/marketing.service';
-import type { RevenueMainCategory, RevenueSubcategory, ExpenseCategory, ExpenseSubcategory, CostCenter, Supplier, InstagramIntegration } from '../types';
+import type { RevenueMainCategory, RevenueSubcategory, ExpenseCategory, ExpenseSubcategory, CostCenter, Supplier } from '../types';
 
-type TabId = 'receita-categorias' | 'receita-subcategorias' | 'despesa-categorias' | 'subcategorias' | 'centros-custo' | 'fornecedores' | 'competencia' | 'marketing' | 'integracoes' | 'sistema';
+type TabId = 'receita-categorias' | 'receita-subcategorias' | 'despesa-categorias' | 'subcategorias' | 'centros-custo' | 'fornecedores' | 'competencia' | 'sistema';
 
 const TABS: { id: TabId; label: string; icon: typeof Tag }[] = [
   { id: 'receita-categorias', label: 'Categoria Principal (Receita)', icon: Tag },
@@ -38,8 +37,6 @@ const TABS: { id: TabId; label: string; icon: typeof Tag }[] = [
   { id: 'centros-custo', label: 'Centros de Custo', icon: Building2 },
   { id: 'fornecedores', label: 'Fornecedores', icon: Truck },
   { id: 'competencia', label: 'Competência', icon: Calendar },
-  { id: 'marketing', label: 'Marketing', icon: Megaphone },
-  { id: 'integracoes', label: 'Integrações', icon: Instagram },
   { id: 'sistema', label: 'Sistema', icon: SettingsIcon },
 ];
 
@@ -68,9 +65,6 @@ export default function ConfiguracoesScreen() {
   const [subcategories, setSubcategories] = useState<ExpenseSubcategory[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [integration, setIntegration] = useState<InstagramIntegration | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [connecting, setConnecting] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<{ id: string; name: string } | null>(null);
@@ -86,14 +80,13 @@ export default function ConfiguracoesScreen() {
     setLoading(true);
     setError(false);
     try {
-      const [revMainCats, revSubs, expCats, subs, ccs, sups, integ] = await Promise.all([
+      const [revMainCats, revSubs, expCats, subs, ccs, sups] = await Promise.all([
         fetchAllRevenueMainCategories(),
         fetchAllRevenueSubcategories(),
         fetchAllExpenseCategories(),
         fetchAllSubcategories(),
         fetchAllCostCenters(),
         fetchAllSuppliers(),
-        fetchInstagramIntegration(),
       ]);
       setRevenueMainCategories(revMainCats);
       setRevenueSubcategories(revSubs);
@@ -101,7 +94,6 @@ export default function ConfiguracoesScreen() {
       setSubcategories(subs);
       setCostCenters(ccs);
       setSuppliers(sups);
-      setIntegration(integ);
     } catch {
       setError(true);
     } finally {
@@ -110,27 +102,6 @@ export default function ConfiguracoesScreen() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  // Handle OAuth callback redirect params
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const igSuccess = params.get('ig_success');
-    const igError = params.get('ig_error');
-    if (igSuccess) {
-      toast.success('Instagram Business conectado com sucesso! Sincronização inicial concluída.');
-      // Clean URL
-      const url = new URL(window.location.href);
-      url.searchParams.delete('ig_success');
-      window.history.replaceState({}, '', url.toString());
-      loadData();
-    }
-    if (igError) {
-      toast.error(`Erro na conexão: ${decodeURIComponent(igError)}`);
-      const url = new URL(window.location.href);
-      url.searchParams.delete('ig_error');
-      window.history.replaceState({}, '', url.toString());
-    }
-  }, []);
 
   const handleOpenNew = () => {
     setEditingItem(null);
@@ -426,220 +397,6 @@ export default function ConfiguracoesScreen() {
     </div>
   );
 
-  const renderMarketing = () => (
-    <div className="card p-6">
-      <h3 className="text-base font-semibold text-ink-900">Configurações de Marketing</h3>
-      <p className="mt-1 text-sm text-ink-500">Defina os horários sugeridos para publicações.</p>
-      <div className="mt-4 space-y-4">
-        <div className="flex items-center justify-between rounded-lg bg-ink-50 p-4">
-          <div>
-            <p className="text-sm font-medium text-ink-700">Story</p>
-            <p className="mt-0.5 text-xs text-ink-500">Segunda a Sexta, horário sugerido: 12:00</p>
-          </div>
-          <Badge variant="info" size="md">12:00</Badge>
-        </div>
-        <div className="flex items-center justify-between rounded-lg bg-ink-50 p-4">
-          <div>
-            <p className="text-sm font-medium text-ink-700">Feed</p>
-            <p className="mt-0.5 text-xs text-ink-500">Terça e Quinta, horário sugerido: 19:00</p>
-          </div>
-          <Badge variant="info" size="md">19:00</Badge>
-        </div>
-      </div>
-    </div>
-  );
-
-  const handleConnectInstagram = async () => {
-    setConnecting(true);
-    try {
-      const authUrl = await getInstagramAuthUrl();
-      window.location.href = authUrl;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao iniciar conexão';
-      if (msg.includes('META_APP_ID') || msg.includes('configuration')) {
-        toast.error('A integração requer configuração das credenciais da Meta (META_APP_ID, META_APP_SECRET, META_REDIRECT_URI). Contate o administrador do sistema.');
-      } else {
-        toast.error(msg);
-      }
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  const handleSyncInstagram = async () => {
-    setSyncing(true);
-    try {
-      const result = await syncInstagram();
-      toast.success(`Sincronização concluída! ${result.synced} nova(s) publicação(ões) importada(s).`);
-      await loadData();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro na sincronização';
-      if (msg.includes('not connected')) {
-        toast.error('Instagram não está conectado.');
-      } else if (msg.includes('Re-authentication') || msg.includes('expired')) {
-        toast.error('Token expirado. Por favor, reconecte sua conta Instagram.');
-      } else {
-        toast.error(msg);
-      }
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleDisconnectInstagram = async () => {
-    try {
-      await disconnectInstagram();
-      toast.success('Instagram desconectado com sucesso.');
-      await loadData();
-    } catch {
-      toast.error('Não foi possível desconectar.');
-    }
-  };
-
-  const renderIntegracoes = () => {
-    const isConnected = integration?.connected ?? false;
-    const hasSyncError = !!integration?.sync_error;
-
-    return (
-      <div className="space-y-4">
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-secondary-600 text-white">
-                <Instagram className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-ink-900">Instagram Business</h3>
-                <p className="text-sm text-ink-500">Conecte sua conta para automação de marketing</p>
-              </div>
-            </div>
-            <Badge variant={isConnected ? 'success' : 'neutral'} size="md">
-              {isConnected ? '🟢 Conectado' : '🔴 Não conectado'}
-            </Badge>
-          </div>
-
-          {isConnected ? (
-            <div className="space-y-4">
-              {/* Account info */}
-              <div className="flex items-center gap-4 rounded-lg bg-ink-50 p-4">
-                {integration?.profile_pic_url ? (
-                  <img
-                    src={integration.profile_pic_url}
-                    alt={integration.account_name ?? 'Instagram'}
-                    className="h-14 w-14 rounded-full object-cover ring-2 ring-white shadow-sm"
-                  />
-                ) : (
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-100 text-primary-600">
-                    <Instagram className="h-7 w-7" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-ink-900">{integration?.account_name ?? '-'}</p>
-                  <p className="text-xs text-ink-500 flex items-center gap-1">
-                    <AtSign className="h-3 w-3" />
-                    {integration?.username ?? '-'}
-                  </p>
-                  <div className="mt-1 flex items-center gap-3 text-xs text-ink-500">
-                    <span className="flex items-center gap-1">
-                      <User className="h-3 w-3" />
-                      {integration?.followers_count ?? 0} seguidores
-                    </span>
-                    <span>{integration?.media_count ?? 0} publicações</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sync error warning */}
-              {hasSyncError && (
-                <div className="flex items-start gap-2.5 rounded-lg bg-error-50 p-3">
-                  <AlertCircle className="h-4.5 w-4.5 flex-shrink-0 mt-0.5 text-error-600" />
-                  <div>
-                    <p className="text-sm font-semibold text-error-700">Erro de sincronização</p>
-                    <p className="text-xs text-error-600">{integration?.sync_error}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Meta info */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-lg bg-ink-50 p-3">
-                  <p className="text-xs text-ink-500">Última Sincronização</p>
-                  <p className="text-sm font-medium text-ink-900">{integration?.last_sync_at ? formatDate(integration.last_sync_at) : '-'}</p>
-                </div>
-                <div className="rounded-lg bg-ink-50 p-3">
-                  <p className="text-xs text-ink-500">Última Postagem</p>
-                  <p className="text-sm font-medium text-ink-900">{integration?.last_post_date ? formatDate(integration.last_post_date) : '-'}</p>
-                </div>
-                <div className="rounded-lg bg-ink-50 p-3">
-                  <p className="text-xs text-ink-500">Conectado em</p>
-                  <p className="text-sm font-medium text-ink-900">{integration?.connected_at ? formatDate(integration.connected_at) : '-'}</p>
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={handleSyncInstagram}
-                  disabled={syncing}
-                  className="btn-primary"
-                >
-                  <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                  {syncing ? 'Sincronizando...' : 'Sincronizar Agora'}
-                </button>
-                <button
-                  onClick={handleDisconnectInstagram}
-                  className="btn-secondary"
-                >
-                  <Unlink className="h-4 w-4" />
-                  Desconectar
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-ink-50 p-4">
-                <p className="text-sm text-ink-600">
-                  A integração com Instagram Business utiliza o OAuth oficial da Meta.
-                  Após conectar, os dados de publicação serão coletados automaticamente a cada 30 minutos.
-                </p>
-              </div>
-              <div className="rounded-lg bg-primary-50 p-4">
-                <p className="text-xs font-medium text-primary-700 mb-2">Requisitos para conexão:</p>
-                <ul className="text-xs text-primary-600 space-y-1">
-                  <li>• Conta Instagram Business (não pessoal)</li>
-                  <li>• Página do Facebook vinculada à conta Instagram</li>
-                  <li>• Permissão de administrador da Página</li>
-                </ul>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleConnectInstagram}
-                  disabled={connecting}
-                  className="btn-primary"
-                >
-                  {connecting ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Conectando...
-                    </>
-                  ) : (
-                    <>
-                      <Link2 className="h-4 w-4" />
-                      Conectar Instagram
-                    </>
-                  )}
-                </button>
-                <span className="text-xs text-ink-400">
-                  Fluxo: Conectar → Login Meta → Escolher Página → Autorizar
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const renderSystem = () => (
     <div className="card p-6">
       <h3 className="text-base font-semibold text-ink-900">Parâmetros do Sistema</h3>
@@ -647,7 +404,7 @@ export default function ConfiguracoesScreen() {
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="text-xs font-medium text-ink-500">Nome da Empresa</label>
-          <p className="mt-1 text-sm font-medium text-ink-900">CarCenter PRO</p>
+          <p className="mt-1 text-sm font-medium text-ink-900">BoxGest</p>
         </div>
         <div>
           <label className="text-xs font-medium text-ink-500">Moeda</label>
@@ -708,8 +465,6 @@ export default function ConfiguracoesScreen() {
       )}
 
       {activeTab === 'competencia' ? renderCompetence()
-        : activeTab === 'marketing' ? renderMarketing()
-        : activeTab === 'integracoes' ? renderIntegracoes()
         : activeTab === 'sistema' ? renderSystem()
         : renderTable()}
 

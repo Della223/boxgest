@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import {
   Download, Search, FileText, BarChart3, DollarSign, Receipt,
-  CreditCard, Building2, Megaphone, Shield, TrendingUp, Printer,
+  CreditCard, Building2, Shield, TrendingUp, Printer,
 } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 import EmptyState from '../components/ui/EmptyState';
@@ -12,11 +12,10 @@ import { fetchRevenues } from '../services/revenue.service';
 import { fetchExpenses } from '../services/expense.service';
 import { fetchBudgets } from '../services/budget.service';
 import { fetchDRE } from '../services/dre.service';
-import { fetchMarketingPosts } from '../services/marketing.service';
 import { fetchAuditLogs } from '../services/audit.service';
 import { formatCurrency, formatDate, formatDateTime, getCurrentCompetence, getCompetenceString, downloadCSV, printContent } from '../utils/format';
 import { netAmount } from '../utils/deduction';
-import type { Revenue, Expense, Budget, MarketingPost, AuditLog } from '../types';
+import type { Revenue, Expense, Budget, AuditLog } from '../types';
 
 interface ReportDef {
   id: string;
@@ -36,7 +35,6 @@ const REPORTS: ReportDef[] = [
   { id: 'receitas-categoria', name: 'Receitas por Categoria', description: 'Agrupamento de receitas por categoria', icon: DollarSign, category: 'Comercial' },
   { id: 'centros-custo', name: 'Centros de Custo', description: 'Distribuição de despesas por centro de custo', icon: Building2, category: 'Financeiro' },
   { id: 'auditoria', name: 'Auditoria', description: 'Log de operações do sistema', icon: Shield, category: 'Operacional' },
-  { id: 'marketing', name: 'Marketing', description: 'Publicações de Story e Feed', icon: Megaphone, category: 'Operacional' },
 ];
 
 export default function RelatoriosScreen() {
@@ -194,13 +192,6 @@ export default function RelatoriosScreen() {
         headers = ['Data/Hora', 'Usuário', 'Módulo', 'Operação', 'ID do Registro'];
         rows = logs.map((l: AuditLog) => [
           formatDateTime(l.created_at), l.user?.name ?? '-', l.module, l.operation, l.record_id ?? '-',
-        ]);
-      } else if (reportId === 'marketing') {
-        const posts = await fetchMarketingPosts();
-        title = 'Relatório de Marketing';
-        headers = ['Data', 'Tipo', 'Publicado', 'Publicado por'];
-        rows = posts.map((p: MarketingPost) => [
-          formatDate(p.reference_date), p.post_type, p.published ? 'Sim' : 'Não', p.publisher?.name ?? '-',
         ]);
       }
 

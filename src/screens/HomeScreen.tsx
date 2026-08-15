@@ -170,7 +170,7 @@ export default function HomeScreen() {
             </div>
             <span className="text-sm font-semibold text-ink-900">{formatCurrency(data.kpis.deducoesReceita)}</span>
           </div>
-          <p className="mt-1 text-xs text-ink-400">Antecipação de recebíveis (ex.: Localiza) + impostos sobre vendas (ex.: ISS/ICMS) — já descontados da Receita e do Resultado do Mês acima. Detalhamento por origem disponível no DRE.</p>
+          <p className="mt-1 text-xs text-ink-400">Antecipação de recebíveis (ex.: frotas/seguradoras) + impostos sobre vendas (ex.: ISS/ICMS) — já descontados da Receita e do Resultado do Mês acima. Detalhamento por origem disponível no DRE.</p>
         </div>
       )}
 

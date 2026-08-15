@@ -3,35 +3,26 @@ import { normalizeCostCenterName } from '../utils/costCenter';
 import { netAmount } from '../utils/deduction';
 import type { DREData, DREExpenseCostCenterGroup } from '../types';
 
-// CPV e CSP são custo direto (deduzido antes do Lucro Bruto, junto com a
-// Receita Líquida). IR/CSLL é imposto sobre o lucro (deduzido depois do
-// Resultado Operacional). Retiradas de Sócio não são despesa da loja — ficam
+// Custo Direto é custo direto (deduzido antes do Lucro Bruto, junto com a
+// Receita Líquida). Impostos é imposto sobre o lucro (deduzido depois do
+// Resultado Operacional). Retiradas não são despesa da loja — ficam
 // de fora do resultado inteiramente, exibidas só como linha de memorando.
-// Deduções (ex.: categoria "Imposto sobre vendas" — ISS/ICMS apurado
-// externamente, não a % automática da Localiza) tem a mesma natureza
-// contábil de um imposto sobre vendas: reduz a Receita Bruta, não é despesa
-// operacional da loja. Entra na linha "(-) Deduções" junto com a dedução
-// automática de receita (ver deducoesMap abaixo), não em Despesas
-// Operacionais — mesmo precedente que motivou tratar "Imposto sobre vendas"
-// assim em vez de deixá-lo misturado com aluguel/salários.
 // Qualquer outro centro de custo — e despesas sem centro de custo definido
 // — permanece em Despesas Operacionais.
 // Comparação sempre normalizada (ver utils/costCenter.ts) — nomes vindos do
 // banco podem diferir do literal aqui em espaço/acentuação sem que isso
 // apareça visualmente, causando classificação errada silenciosa.
-const DIRECT_COST_CENTERS = new Set(['CPV', 'CSP'].map(normalizeCostCenterName));
-const TAX_COST_CENTER = normalizeCostCenterName('IR/CSLL');
-const WITHDRAWAL_COST_CENTER = normalizeCostCenterName('Retiradas de Sócio');
-const DEDUCTION_COST_CENTER = normalizeCostCenterName('Deduções');
+const DIRECT_COST_CENTER = normalizeCostCenterName('Custo Direto');
+const TAX_COST_CENTER = normalizeCostCenterName('Impostos');
+const WITHDRAWAL_COST_CENTER = normalizeCostCenterName('Retiradas');
 
-type CostCenterBucket = 'direct' | 'tax' | 'withdrawal' | 'deduction' | 'operational';
+type CostCenterBucket = 'direct' | 'tax' | 'withdrawal' | 'operational';
 
 function classifyCostCenter(name: string): CostCenterBucket {
   const normalized = normalizeCostCenterName(name);
-  if (DIRECT_COST_CENTERS.has(normalized)) return 'direct';
+  if (normalized === DIRECT_COST_CENTER) return 'direct';
   if (normalized === TAX_COST_CENTER) return 'tax';
   if (normalized === WITHDRAWAL_COST_CENTER) return 'withdrawal';
-  if (normalized === DEDUCTION_COST_CENTER) return 'deduction';
   return 'operational';
 }
 
@@ -154,9 +145,6 @@ export async function fetchDRE(
         } else if (bucket === 'withdrawal') {
           addExpense(withdrawalMap, ccName, catName, subName, amount);
           retiradas += amount;
-        } else if (bucket === 'deduction') {
-          deducoesMap[catName] = (deducoesMap[catName] || 0) + amount;
-          deducoes += amount;
         } else {
           addExpense(operationalMap, ccName, catName, subName, amount);
           despesasOperacionais += amount;
@@ -170,11 +158,9 @@ export async function fetchDRE(
   const irCsllPorCategoria = mapToGroups(taxMap);
   const retiradasPorCategoria = mapToGroups(withdrawalMap);
 
-  // deducoes/deducoesMap só ficam completos depois do loop de despesas acima
-  // (a dedução automática de receita — ex. Localiza — e a dedução lançada
-  // como despesa no Centro de Custo "Deduções" — ex. Imposto sobre Vendas —
-  // alimentam o mesmo total e a mesma lista, cada uma com sua própria
-  // origem de dado, por isso receitaLiquida só pode ser calculada aqui.
+  // deducoesMap fica completo logo após o loop de receitas acima — a
+  // dedução automática de receita (deduction_rate por categoria) é a
+  // única origem de "Deduções" no DRE agora.
   const deducoesPorCategoria = Object.entries(deducoesMap).map(([name, amount]) => ({ name, amount }));
   const receitaLiquida = receitaBruta - deducoes;
 

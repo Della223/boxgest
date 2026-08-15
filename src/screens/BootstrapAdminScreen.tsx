@@ -49,7 +49,7 @@ export default function BootstrapAdminScreen() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-primary-50 via-white to-primary-50">
       <div className="w-full max-w-lg animate-fade-in">
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo-full.png" alt="CarCenter PRO Finance" className="w-56 max-w-[80vw]" />
+          <img src="/logo-full.png" alt="BoxGest" className="w-56 max-w-[80vw]" />
           <p className="mt-2 text-sm text-ink-500 font-medium">Centro de Inteligência Empresarial</p>
         </div>
 
