@@ -117,6 +117,7 @@ export default function ComercialScreen() {
   const [saving, setSaving] = useState(false);
   const [newSubcategoryForIndex, setNewSubcategoryForIndex] = useState<number | null>(null);
   const [newSubcategoryName, setNewSubcategoryName] = useState('');
+  const [newSubcategoryCategoryId, setNewSubcategoryCategoryId] = useState('');
   const [creatingSubcategory, setCreatingSubcategory] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Revenue | null>(null);
@@ -247,7 +248,7 @@ export default function ComercialScreen() {
   };
 
   const handleCreateSubcategory = async (index: number) => {
-    const mainCategoryId = items[index]?.main_category_id;
+    const mainCategoryId = newSubcategoryCategoryId;
     if (!mainCategoryId) return;
     const name = newSubcategoryName.trim();
     if (!name) return;
@@ -255,12 +256,12 @@ export default function ComercialScreen() {
     try {
       const created = await createRevenueSubcategory(mainCategoryId, name);
       setSubcategories((prev) => [...prev, created]);
-      changeItem(setItems, index, { subcategory_id: created.id });
+      changeItem(setItems, index, { subcategory_id: created.id, main_category_id: mainCategoryId });
       setNewSubcategoryForIndex(null);
       setNewSubcategoryName('');
-      toast.success('Subcategoria criada com sucesso.');
+      toast.success('Item criado com sucesso.');
     } catch {
-      toast.error('Não foi possível criar a subcategoria.');
+      toast.error('Não foi possível criar o item.');
     } finally {
       setCreatingSubcategory(false);
     }
@@ -269,8 +270,7 @@ export default function ComercialScreen() {
   const validateItems = (list: SaleItemForm[], errors: Record<string, string>) => {
     if (list.length === 0) errors.items = 'Adicione pelo menos um item.';
     list.forEach((item, i) => {
-      if (!item.main_category_id) errors[`item_${i}_category`] = 'Categoria é obrigatória.';
-      if (!item.subcategory_id) errors[`item_${i}_subcategory`] = 'Subcategoria é obrigatória.';
+      if (!item.subcategory_id || !item.main_category_id) errors[`item_${i}_subcategory`] = 'Item é obrigatório.';
       if (item.quantity < 0) errors[`item_${i}_quantity`] = 'Quantidade deve ser maior ou igual a zero.';
       if (!item.amount || Number(item.amount) <= 0) errors[`item_${i}_amount`] = 'Valor deve ser maior que zero.';
     });
@@ -738,22 +738,54 @@ export default function ComercialScreen() {
           ) : (
             <div>
               <label className="block text-sm font-medium text-ink-700 mb-1.5">Itens da Venda *</label>
-              <p className="text-xs text-ink-400 mb-2">Adicione um item para cada tipo de produto/serviço da venda (ex.: Peças, Pneus, Mão de obra).</p>
+              <p className="text-xs text-ink-400 mb-2">Adicione um item para cada produto/serviço da venda (ex.: Peças, Pneus, Mão de obra).</p>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {items.map((item, i) => (
-                  <div key={i} className="rounded-lg ring-1 ring-ink-200 p-3 space-y-2">
+                  <div key={i}>
                     <div className="flex items-start gap-2">
                       <div className="flex-1">
                         <select
-                          value={item.main_category_id}
-                          onChange={(e) => changeItem(setItems, i, { main_category_id: e.target.value, subcategory_id: '' })}
+                          value={item.subcategory_id}
+                          onChange={(e) => {
+                            const subId = e.target.value;
+                            const sub = subcategories.find((s) => s.id === subId);
+                            changeItem(setItems, i, { subcategory_id: subId, main_category_id: sub?.main_category_id ?? '' });
+                          }}
                           className="input-field"
                         >
-                          <option value="">Categoria...</option>
-                          {mainCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          <option value="">Selecione o item...</option>
+                          {mainCategories.map((c) => (
+                            <optgroup key={c.id} label={c.name}>
+                              {subcategoriesFor(c.id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </optgroup>
+                          ))}
                         </select>
-                        {formErrors[`item_${i}_category`] && <p className="mt-1 text-xs text-error-600">{formErrors[`item_${i}_category`]}</p>}
+                        {formErrors[`item_${i}_subcategory`] && <p className="mt-1 text-xs text-error-600">{formErrors[`item_${i}_subcategory`]}</p>}
+                      </div>
+                      <div className="w-20">
+                        <input
+                          type="number"
+                          min={0}
+                          max={9999}
+                          value={item.quantity}
+                          onChange={(e) => changeItem(setItems, i, { quantity: Number(e.target.value) })}
+                          className="input-field"
+                          placeholder="Qtd."
+                        />
+                        {formErrors[`item_${i}_quantity`] && <p className="mt-1 text-xs text-error-600">Inválida</p>}
+                      </div>
+                      <div className="w-32">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={item.amount}
+                          onChange={(e) => changeItem(setItems, i, { amount: e.target.value })}
+                          className="input-field"
+                          placeholder="Valor"
+                        />
+                        {formErrors[`item_${i}_amount`] && <p className="mt-1 text-xs text-error-600">Inválido</p>}
                       </div>
                       <button
                         type="button"
@@ -766,74 +798,40 @@ export default function ComercialScreen() {
                       </button>
                     </div>
 
-                    {item.main_category_id && (
-                      <>
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <select
-                              value={item.subcategory_id}
-                              onChange={(e) => changeItem(setItems, i, { subcategory_id: e.target.value })}
-                              className="input-field"
-                            >
-                              <option value="">Subcategoria...</option>
-                              {subcategoriesFor(item.main_category_id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                            {formErrors[`item_${i}_subcategory`] && <p className="mt-1 text-xs text-error-600">{formErrors[`item_${i}_subcategory`]}</p>}
-                          </div>
-                          {newSubcategoryForIndex !== i && (
-                            <button type="button" onClick={() => { setNewSubcategoryForIndex(i); setNewSubcategoryName(''); }} className="ml-2 text-xs font-medium text-accent-600 hover:text-accent-700 whitespace-nowrap">
-                              + Nova subcategoria
-                            </button>
-                          )}
-                        </div>
-
-                        {newSubcategoryForIndex === i && (
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              autoFocus
-                              value={newSubcategoryName}
-                              onChange={(e) => setNewSubcategoryName(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateSubcategory(i); } }}
-                              placeholder="Nome da nova subcategoria"
-                              className="input-field flex-1"
-                            />
-                            <button type="button" onClick={() => handleCreateSubcategory(i)} disabled={creatingSubcategory || !newSubcategoryName.trim()} className="btn-primary whitespace-nowrap">
-                              Criar
-                            </button>
-                            <button type="button" onClick={() => { setNewSubcategoryForIndex(null); setNewSubcategoryName(''); }} className="btn-secondary">
-                              Cancelar
-                            </button>
-                          </div>
-                        )}
-
-                        <div className="flex items-start gap-2">
-                          <div className="w-24">
-                            <input
-                              type="number"
-                              min={0}
-                              max={9999}
-                              value={item.quantity}
-                              onChange={(e) => changeItem(setItems, i, { quantity: Number(e.target.value) })}
-                              className="input-field"
-                              placeholder="Qtd."
-                            />
-                            {formErrors[`item_${i}_quantity`] && <p className="mt-1 text-xs text-error-600">Inválida</p>}
-                          </div>
-                          <div className="flex-1">
-                            <input
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              value={item.amount}
-                              onChange={(e) => changeItem(setItems, i, { amount: e.target.value })}
-                              className="input-field"
-                              placeholder="Valor"
-                            />
-                            {formErrors[`item_${i}_amount`] && <p className="mt-1 text-xs text-error-600">Inválido</p>}
-                          </div>
-                        </div>
-                      </>
+                    {newSubcategoryForIndex !== i ? (
+                      <button
+                        type="button"
+                        onClick={() => { setNewSubcategoryForIndex(i); setNewSubcategoryName(''); setNewSubcategoryCategoryId(item.main_category_id || ''); }}
+                        className="mt-1 text-xs font-medium text-accent-600 hover:text-accent-700"
+                      >
+                        + Novo item de venda
+                      </button>
+                    ) : (
+                      <div className="mt-1.5 flex gap-2">
+                        <select
+                          value={newSubcategoryCategoryId}
+                          onChange={(e) => setNewSubcategoryCategoryId(e.target.value)}
+                          className="input-field w-44"
+                        >
+                          <option value="">Categoria...</option>
+                          {mainCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <input
+                          type="text"
+                          autoFocus
+                          value={newSubcategoryName}
+                          onChange={(e) => setNewSubcategoryName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateSubcategory(i); } }}
+                          placeholder="Nome do novo item"
+                          className="input-field flex-1"
+                        />
+                        <button type="button" onClick={() => handleCreateSubcategory(i)} disabled={creatingSubcategory || !newSubcategoryName.trim() || !newSubcategoryCategoryId} className="btn-primary whitespace-nowrap">
+                          Criar
+                        </button>
+                        <button type="button" onClick={() => { setNewSubcategoryForIndex(null); setNewSubcategoryName(''); }} className="btn-secondary">
+                          Cancelar
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -879,66 +877,59 @@ export default function ComercialScreen() {
             </div>
             <div className="space-y-2">
               {recalcItems.map((item, i) => (
-                <div key={i} className="rounded-lg ring-1 ring-ink-200 p-3 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1">
-                      <select
-                        value={item.main_category_id}
-                        onChange={(e) => changeItem(setRecalcItems, i, { main_category_id: e.target.value, subcategory_id: '' })}
-                        className="input-field"
-                      >
-                        <option value="">Categoria...</option>
-                        {mainCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                      {recalcErrors[`item_${i}_category`] && <p className="mt-1 text-xs text-error-600">{recalcErrors[`item_${i}_category`]}</p>}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(setRecalcItems, i)}
-                      disabled={recalcItems.length <= 1}
-                      className="p-2.5 text-ink-400 hover:text-error-600 hover:bg-error-50 rounded-md transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                      title="Remover item"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
+                <div key={i} className="flex items-start gap-2">
                   <div className="flex-1">
                     <select
                       value={item.subcategory_id}
-                      onChange={(e) => changeItem(setRecalcItems, i, { subcategory_id: e.target.value })}
+                      onChange={(e) => {
+                        const subId = e.target.value;
+                        const sub = subcategories.find((s) => s.id === subId);
+                        changeItem(setRecalcItems, i, { subcategory_id: subId, main_category_id: sub?.main_category_id ?? '' });
+                      }}
                       className="input-field"
                     >
-                      <option value="">Subcategoria...</option>
-                      {subcategoriesFor(item.main_category_id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      <option value="">Selecione o item...</option>
+                      {mainCategories.map((c) => (
+                        <optgroup key={c.id} label={c.name}>
+                          {subcategoriesFor(c.id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </optgroup>
+                      ))}
                     </select>
                     {recalcErrors[`item_${i}_subcategory`] && <p className="mt-1 text-xs text-error-600">{recalcErrors[`item_${i}_subcategory`]}</p>}
                   </div>
-                  <div className="flex items-start gap-2">
-                    <div className="w-24">
-                      <input
-                        type="number"
-                        min={0}
-                        max={9999}
-                        value={item.quantity}
-                        onChange={(e) => changeItem(setRecalcItems, i, { quantity: Number(e.target.value) })}
-                        className="input-field"
-                        placeholder="Qtd."
-                      />
-                      {recalcErrors[`item_${i}_quantity`] && <p className="mt-1 text-xs text-error-600">Inválida</p>}
-                    </div>
-                    <div className="flex-1">
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={item.amount}
-                        onChange={(e) => changeItem(setRecalcItems, i, { amount: e.target.value })}
-                        className="input-field"
-                        placeholder="Valor"
-                      />
-                      {recalcErrors[`item_${i}_amount`] && <p className="mt-1 text-xs text-error-600">Inválido</p>}
-                    </div>
+                  <div className="w-20">
+                    <input
+                      type="number"
+                      min={0}
+                      max={9999}
+                      value={item.quantity}
+                      onChange={(e) => changeItem(setRecalcItems, i, { quantity: Number(e.target.value) })}
+                      className="input-field"
+                      placeholder="Qtd."
+                    />
+                    {recalcErrors[`item_${i}_quantity`] && <p className="mt-1 text-xs text-error-600">Inválida</p>}
                   </div>
+                  <div className="w-32">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={item.amount}
+                      onChange={(e) => changeItem(setRecalcItems, i, { amount: e.target.value })}
+                      className="input-field"
+                      placeholder="Valor"
+                    />
+                    {recalcErrors[`item_${i}_amount`] && <p className="mt-1 text-xs text-error-600">Inválido</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(setRecalcItems, i)}
+                    disabled={recalcItems.length <= 1}
+                    className="p-2.5 text-ink-400 hover:text-error-600 hover:bg-error-50 rounded-md transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                    title="Remover item"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
               ))}
               {recalcErrors.items && <p className="text-xs text-error-600">{recalcErrors.items}</p>}
