@@ -66,8 +66,9 @@ export async function createUserByAdmin(
   // porque signUp troca a sessão ativa para o usuário recém-criado — depois
   // disso não dá mais para confiar em "quem está logado" para saber a oficina certa.
   const { data: sessionData } = await supabase.auth.getSession();
-  const currentAuthId = sessionData.session?.user?.id;
-  if (!currentAuthId) return { error: 'Sessão expirada. Faça login novamente.' };
+  const adminSession = sessionData.session;
+  const currentAuthId = adminSession?.user?.id;
+  if (!currentAuthId || !adminSession) return { error: 'Sessão expirada. Faça login novamente.' };
 
   const { data: currentProfile, error: profileLookupError } = await supabase
     .from('users')
@@ -85,6 +86,18 @@ export async function createUserByAdmin(
 
   if (authError) return { error: authError.message };
   if (!authData.user) return { error: 'Falha ao criar usuário.' };
+
+  // signUp() troca a sessão ativa do navegador para o usuário recém-criado.
+  // Restaura a sessão do admin ANTES de inserir, senão a regra de segurança
+  // (RLS) valida contra a oficina errada (a do usuário novo, que ainda não
+  // tem nenhuma) e a inserção é rejeitada.
+  const { error: restoreError } = await supabase.auth.setSession({
+    access_token: adminSession.access_token,
+    refresh_token: adminSession.refresh_token,
+  });
+  if (restoreError) {
+    return { error: 'Usuário criado, mas não foi possível voltar sua sessão de admin. Faça login novamente.' };
+  }
 
   const { error: insertError } = await supabase.from('users').insert({
     auth_id: authData.user.id,
