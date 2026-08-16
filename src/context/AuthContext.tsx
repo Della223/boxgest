@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
-import type { User } from '../types';
 
 export type UserRole = 'admin' | 'financeiro' | 'operador';
 
@@ -11,11 +10,14 @@ export interface AppUser {
   email: string;
   role: UserRole;
   avatarInitials: string;
+  workshop_id: string;
 }
 
 interface AuthContextValue {
   user: AppUser | null;
   loading: boolean;
+  workshopActive: boolean;
+  workshopName: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
@@ -34,8 +36,10 @@ function getInitials(name: string): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [workshopActive, setWorkshopActive] = useState(true);
+  const [workshopName, setWorkshopName] = useState<string | null>(null);
 
-  const loadUserProfile = async (authId: string, email: string): Promise<AppUser | null> => {
+  const loadUserProfile = async (authId: string): Promise<AppUser | null> => {
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -51,18 +55,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: data.email,
       role: data.role as UserRole,
       avatarInitials: getInitials(data.name),
+      workshop_id: data.workshop_id,
     };
+  };
+
+  // Busca se a oficina do usuário está ativa (assinatura em dia). Feito à parte do
+  // perfil porque users/workshops ficam sempre visíveis para o próprio usuário mesmo
+  // com a oficina desativada — assim dá pra mostrar uma mensagem clara em vez de
+  // simplesmente parecer que a conta não existe mais.
+  const loadWorkshopStatus = async (workshopId: string) => {
+    const { data } = await supabase
+      .from('workshops')
+      .select('active, name')
+      .eq('id', workshopId)
+      .maybeSingle();
+    setWorkshopActive(data?.active ?? true);
+    setWorkshopName(data?.name ?? null);
   };
 
   const refreshUser = async () => {
     const { data: sessionData } = await supabase.auth.getSession();
     if (sessionData.session?.user) {
-      const profile = await loadUserProfile(
-        sessionData.session.user.id,
-        sessionData.session.user.email ?? ''
-      );
+      const profile = await loadUserProfile(sessionData.session.user.id);
       if (profile) {
         setUser(profile);
+        await loadWorkshopStatus(profile.workshop_id);
         return;
       }
     }
@@ -77,12 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       if (sessionData.session?.user) {
-        const profile = await loadUserProfile(
-          sessionData.session.user.id,
-          sessionData.session.user.email ?? ''
-        );
+        const profile = await loadUserProfile(sessionData.session.user.id);
         if (mounted) {
-          if (profile) setUser(profile);
+          if (profile) {
+            setUser(profile);
+            await loadWorkshopStatus(profile.workshop_id);
+          }
           setLoading(false);
         }
       } else {
@@ -95,8 +112,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
         if (session?.user) {
-          const profile = await loadUserProfile(session.user.id, session.user.email ?? '');
-          if (mounted && profile) setUser(profile);
+          const profile = await loadUserProfile(session.user.id);
+          if (mounted && profile) {
+            setUser(profile);
+            await loadWorkshopStatus(profile.workshop_id);
+          }
         } else {
           if (mounted) setUser(null);
         }
@@ -114,9 +134,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error: error.message };
 
     if (data.user) {
-      const profile = await loadUserProfile(data.user.id, data.user.email ?? '');
+      const profile = await loadUserProfile(data.user.id);
       if (profile) {
         setUser(profile);
+        await loadWorkshopStatus(profile.workshop_id);
         return { error: null };
       }
       return { error: 'Perfil de usuário não encontrado. Contate o administrador.' };
@@ -146,6 +167,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
+        workshopActive,
+        workshopName,
         signIn,
         signOut,
         resetPassword,

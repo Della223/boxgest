@@ -16,10 +16,11 @@ import RelatoriosScreen from './screens/RelatoriosScreen';
 import GestaoUsuariosScreen from './screens/GestaoUsuariosScreen';
 import ConfiguracoesScreen from './screens/ConfiguracoesScreen';
 import AjudaScreen from './screens/AjudaScreen';
+import WorkshopInactiveScreen from './screens/WorkshopInactiveScreen';
 import { type ScreenId } from './config/navigation';
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, workshopActive } = useAuth();
   const [screen, setScreen] = useState<ScreenId>('home');
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -78,6 +79,10 @@ function AppContent() {
       );
     }
     return <LoginScreen onShowSignup={() => setShowSignup(true)} />;
+  }
+
+  if (!workshopActive) {
+    return <WorkshopInactiveScreen />;
   }
 
   const renderScreen = () => {
