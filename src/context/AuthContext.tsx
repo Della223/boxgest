@@ -1,48 +1,213 @@
-import { AlertTriangle, Mail } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { supabase } from '../lib/supabase';
 
-export default function WorkshopInactiveScreen() {
-  const { workshopName, workshopBlockReason, signOut } = useAuth();
-  const isTrialExpired = workshopBlockReason === 'trial_expired';
+export type UserRole = 'admin' | 'financeiro' | 'operador';
+
+export interface AppUser {
+  id: string;
+  auth_id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatarInitials: string;
+  workshop_id: string;
+}
+
+export type WorkshopBlockReason = 'inactive' | 'trial_expired' | null;
+
+interface AuthContextValue {
+  user: AppUser | null;
+  loading: boolean;
+  workshopActive: boolean;
+  workshopBlockReason: WorkshopBlockReason;
+  workshopName: string | null;
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
+  refreshUser: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return parts[0]?.substring(0, 2).toUpperCase() ?? '??';
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [workshopActive, setWorkshopActive] = useState(true);
+  const [workshopBlockReason, setWorkshopBlockReason] = useState<WorkshopBlockReason>(null);
+  const [workshopName, setWorkshopName] = useState<string | null>(null);
+
+  const loadUserProfile = async (authId: string): Promise<AppUser | null> => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('auth_id', authId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      auth_id: data.auth_id,
+      name: data.name,
+      email: data.email,
+      role: data.role as UserRole,
+      avatarInitials: getInitials(data.name),
+      workshop_id: data.workshop_id,
+    };
+  };
+
+  // Busca se a oficina do usuário está ativa (assinatura em dia). Feito à parte do
+  // perfil porque users/workshops ficam sempre visíveis para o próprio usuário mesmo
+  // com a oficina desativada — assim dá pra mostrar uma mensagem clara em vez de
+  // simplesmente parecer que a conta não existe mais.
+  //
+  // Duas formas de ficar sem acesso: (1) desativada manualmente (active = false,
+  // fluxo já existente) ou (2) teste grátis de 10 dias expirou sem confirmação de
+  // pagamento (paid = false e trial_ends_at no passado). "paid" volta true assim que
+  // alguém confirma o pagamento (hoje manual; no futuro pode ser automático via
+  // webhook de um gateway). Se os campos novos não vierem por algum motivo, o
+  // padrão é NÃO bloquear — a barreira de verdade é a RLS no banco, isso aqui é
+  // só a mensagem amigável.
+  const loadWorkshopStatus = async (workshopId: string) => {
+    const { data } = await supabase
+      .from('workshops')
+      .select('active, name, paid, trial_ends_at')
+      .eq('id', workshopId)
+      .maybeSingle();
+
+    const active = data?.active ?? true;
+    const paid = data?.paid ?? true;
+    const trialEndsAt = data?.trial_ends_at ? new Date(data.trial_ends_at) : null;
+    const trialExpired = !!trialEndsAt && trialEndsAt.getTime() <= Date.now();
+
+    let blockReason: WorkshopBlockReason = null;
+    if (!active) blockReason = 'inactive';
+    else if (!paid && trialExpired) blockReason = 'trial_expired';
+
+    setWorkshopActive(blockReason === null);
+    setWorkshopBlockReason(blockReason);
+    setWorkshopName(data?.name ?? null);
+  };
+
+  const refreshUser = async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData.session?.user) {
+      const profile = await loadUserProfile(sessionData.session.user.id);
+      if (profile) {
+        setUser(profile);
+        await loadWorkshopStatus(profile.workshop_id);
+        return;
+      }
+    }
+    setUser(null);
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (sessionData.session?.user) {
+        const profile = await loadUserProfile(sessionData.session.user.id);
+        if (mounted) {
+          if (profile) {
+            setUser(profile);
+            await loadWorkshopStatus(profile.workshop_id);
+          }
+          setLoading(false);
+        }
+      } else {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    init();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      (async () => {
+        if (session?.user) {
+          const profile = await loadUserProfile(session.user.id);
+          if (mounted && profile) {
+            setUser(profile);
+            await loadWorkshopStatus(profile.workshop_id);
+          }
+        } else {
+          if (mounted) setUser(null);
+        }
+      })();
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const signIn = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error: error.message };
+
+    if (data.user) {
+      const profile = await loadUserProfile(data.user.id);
+      if (profile) {
+        setUser(profile);
+        await loadWorkshopStatus(profile.workshop_id);
+        return { error: null };
+      }
+      return { error: 'Perfil de usuário não encontrado. Contate o administrador.' };
+    }
+    return { error: 'Falha ao entrar.' };
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}`,
+    });
+    return { error: error?.message ?? null };
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error: error?.message ?? null };
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-ink-50">
-      <div className="w-full max-w-md card p-8 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning-50 text-warning-600 mb-4">
-          <AlertTriangle className="h-6 w-6" />
-        </div>
-        <h2 className="text-lg font-bold text-ink-900">
-          {isTrialExpired ? 'Seu teste grátis acabou' : 'Acesso temporariamente indisponível'}
-        </h2>
-        <p className="mt-2 text-sm text-ink-500">
-          {isTrialExpired ? (
-            <>
-              O teste grátis de 10 dias {workshopName ? <>da <strong>{workshopName}</strong></> : ''} chegou ao fim.
-              Fale com a gente para ativar sua assinatura e continuar usando o BoxGest — nenhuma informação foi apagada.
-            </>
-          ) : (
-            <>
-              {workshopName ? <>A conta de <strong>{workshopName}</strong> está</> : 'Sua conta está'} desativada no momento.
-              Isso costuma acontecer por pendência de pagamento. Fale com o suporte para regularizar e voltar a acessar seus dados normalmente — nenhuma informação foi apagada.
-            </>
-          )}
-        </p>
-
-        
-          href="mailto:suporte@boxgest.com.br"
-          className="btn-primary w-full justify-center mt-6"
-        >
-          <Mail className="h-4 w-4" />
-          Falar com o suporte
-        </a>
-
-        <button
-          onClick={() => signOut()}
-          className="mt-3 text-sm text-ink-400 hover:text-ink-600 transition-colors"
-        >
-          Sair
-        </button>
-      </div>
-    </div>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        workshopActive,
+        workshopBlockReason,
+        workshopName,
+        signIn,
+        signOut,
+        resetPassword,
+        updatePassword,
+        refreshUser,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 }
