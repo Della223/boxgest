@@ -13,10 +13,13 @@ export interface AppUser {
   workshop_id: string;
 }
 
+export type WorkshopBlockReason = 'inactive' | 'trial_expired' | null;
+
 interface AuthContextValue {
   user: AppUser | null;
   loading: boolean;
   workshopActive: boolean;
+  workshopBlockReason: WorkshopBlockReason;
   workshopName: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -37,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [workshopActive, setWorkshopActive] = useState(true);
+  const [workshopBlockReason, setWorkshopBlockReason] = useState<WorkshopBlockReason>(null);
   const [workshopName, setWorkshopName] = useState<string | null>(null);
 
   const loadUserProfile = async (authId: string): Promise<AppUser | null> => {
@@ -63,13 +67,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // perfil porque users/workshops ficam sempre visíveis para o próprio usuário mesmo
   // com a oficina desativada — assim dá pra mostrar uma mensagem clara em vez de
   // simplesmente parecer que a conta não existe mais.
+  //
+  // Duas formas de ficar sem acesso: (1) desativada manualmente (active = false,
+  // fluxo já existente) ou (2) teste grátis de 10 dias expirou sem confirmação de
+  // pagamento (paid = false e trial_ends_at no passado). "paid" volta true assim que
+  // alguém confirma o pagamento (hoje manual; no futuro pode ser automático via
+  // webhook de um gateway). Se os campos novos não vierem por algum motivo, o
+  // padrão é NÃO bloquear — a barreira de verdade é a RLS no banco, isso aqui é
+  // só a mensagem amigável.
   const loadWorkshopStatus = async (workshopId: string) => {
     const { data } = await supabase
       .from('workshops')
-      .select('active, name')
+      .select('active, name, paid, trial_ends_at')
       .eq('id', workshopId)
       .maybeSingle();
-    setWorkshopActive(data?.active ?? true);
+
+    const active = data?.active ?? true;
+    const paid = data?.paid ?? true;
+    const trialEndsAt = data?.trial_ends_at ? new Date(data.trial_ends_at) : null;
+    const trialExpired = !!trialEndsAt && trialEndsAt.getTime() <= Date.now();
+
+    let blockReason: WorkshopBlockReason = null;
+    if (!active) blockReason = 'inactive';
+    else if (!paid && trialExpired) blockReason = 'trial_expired';
+
+    setWorkshopActive(blockReason === null);
+    setWorkshopBlockReason(blockReason);
     setWorkshopName(data?.name ?? null);
   };
 
@@ -168,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         workshopActive,
+        workshopBlockReason,
         workshopName,
         signIn,
         signOut,
